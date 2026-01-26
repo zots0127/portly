@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Portly</title>
+  <link rel="stylesheet" href="/src/styles.css" />
+</head>
+
+<body>
+  <div class="container">
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <div class="segmented-control">
+          <button class="segment active" id="view-table">表格</button>
+          <button class="segment" id="view-group">分组</button>
+        </div>
+      </div>
+
+      <div class="toolbar-center">
+        <div class="search-field">
+          <span class="icon">🔍</span>
+          <input type="text" id="app-filter" placeholder="搜索应用..." />
+        </div>
+        <div class="search-field" style="width: 120px;">
+          <span class="icon">🔌</span>
+          <input type="number" id="port-filter" placeholder="端口..." />
+        </div>
+      </div>
+
+      <div class="toolbar-right">
+        <div class="toggle-group">
+          <input type="checkbox" class="toggle" id="show-command" />
+          <label class="toggle-label" for="show-command">命令行</label>
+        </div>
+        <div class="toggle-group">
+          <input type="checkbox" class="toggle" id="exclude-system" />
+          <label class="toggle-label" for="exclude-system">隐藏系统</label>
+        </div>
+        <button class="btn-icon" id="refresh-btn" title="刷新">↻</button>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="main">
+      <div class="stats-bar" id="stats">
+        <div class="stat-pill">
+          <span>⏱</span>
+          <span class="value" id="stat-time">--:--:--</span>
+        </div>
+        <div class="stat-pill">
+          <span>📦</span>
+          <span class="value" id="stat-apps">0</span>
+          <span>应用</span>
+        </div>
+        <div class="stat-pill">
+          <span>🔌</span>
+          <span class="value" id="stat-ports">0</span>
+          <span>端口</span>
+        </div>
+      </div>
+
+      <div class="table-wrapper">
+        <table id="port-table">
+          <thead>
+            <tr>
+              <th style="width: 70px">端口</th>
+              <th style="width: 55px">协议</th>
+              <th style="width: 120px">监听地址</th>
+              <th style="width: 70px">PID</th>
+              <th style="min-width: 180px">应用程序</th>
+              <th style="width: 80px">用户</th>
+            </tr>
+          </thead>
+          <tbody id="port-tbody"></tbody>
+        </table>
+      </div>
+
+      <div id="group-view" class="group-view hidden"></div>
+    </main>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+
+</html>

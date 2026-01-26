@@ -11,6 +11,16 @@ A modern local port scanning tool with both GUI and CLI modes, built with Tauri 
 
 ---
 
+<p align="center">
+  <img src="assets/icon.png" width="128" alt="Portly Icon">
+</p>
+
+<p align="center">
+  <img src="assets/screenshot.png" width="600" alt="Portly Screenshot">
+</p>
+
+---
+
 ## ✨ Features / 特性
 
 - 🖥️ **Cross-platform / 跨平台** - macOS, Linux, Windows

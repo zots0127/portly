@@ -11,76 +11,221 @@
 
 <body>
   <div class="container">
-    <!-- Toolbar -->
-    <div class="toolbar">
-      <div class="toolbar-left">
-        <div class="segmented-control">
-          <button class="segment active" id="view-table">表格</button>
-          <button class="segment" id="view-group">分组</button>
-        </div>
-      </div>
-
-      <div class="toolbar-center">
-        <div class="search-field">
-          <span class="icon">🔍</span>
-          <input type="text" id="app-filter" placeholder="搜索应用..." />
-        </div>
-        <div class="search-field" style="width: 120px;">
-          <span class="icon">🔌</span>
-          <input type="number" id="port-filter" placeholder="端口..." />
-        </div>
-      </div>
-
-      <div class="toolbar-right">
-        <div class="toggle-group">
-          <input type="checkbox" class="toggle" id="show-command" />
-          <label class="toggle-label" for="show-command">命令行</label>
-        </div>
-        <div class="toggle-group">
-          <input type="checkbox" class="toggle" id="exclude-system" />
-          <label class="toggle-label" for="exclude-system">隐藏系统</label>
-        </div>
-        <button class="btn-icon" id="refresh-btn" title="刷新">↻</button>
-      </div>
+    <!-- 顶部 Tab 切换 -->
+    <div class="tab-bar">
+      <button class="tab active" id="tab-local">🔌 本地端口</button>
+      <button class="tab" id="tab-network">🌐 网络扫描</button>
+      <button class="tab" id="tab-monitor">📊 网络监测</button>
     </div>
 
-    <!-- Main Content -->
-    <main class="main">
-      <div class="stats-bar" id="stats">
-        <div class="stat-pill">
-          <span>⏱</span>
-          <span class="value" id="stat-time">--:--:--</span>
+    <!-- 本地端口页面 -->
+    <div id="page-local" class="page">
+      <!-- Toolbar -->
+      <div class="toolbar">
+        <div class="toolbar-left">
+          <div class="segmented-control">
+            <button class="segment active" id="view-table">表格</button>
+            <button class="segment" id="view-group">分组</button>
+          </div>
         </div>
-        <div class="stat-pill">
-          <span>📦</span>
-          <span class="value" id="stat-apps">0</span>
-          <span>应用</span>
+
+        <div class="toolbar-center">
+          <div class="search-field">
+            <span class="icon">🔍</span>
+            <input type="text" id="app-filter" placeholder="搜索应用..." />
+          </div>
+          <div class="search-field" style="width: 120px;">
+            <span class="icon">🔌</span>
+            <input type="number" id="port-filter" placeholder="端口..." />
+          </div>
         </div>
-        <div class="stat-pill">
-          <span>🔌</span>
-          <span class="value" id="stat-ports">0</span>
-          <span>端口</span>
+
+        <div class="toolbar-right">
+          <div class="segmented-control" id="source-filter">
+            <button class="segment active" data-filter="all">全部</button>
+            <button class="segment" data-filter="local">💻 本机</button>
+            <button class="segment" data-filter="docker">🐳 Docker</button>
+          </div>
+          <div class="toggle-group">
+            <input type="checkbox" class="toggle" id="show-command" />
+            <label class="toggle-label" for="show-command">命令行</label>
+          </div>
+          <div class="toggle-group">
+            <input type="checkbox" class="toggle" id="exclude-system" />
+            <label class="toggle-label" for="exclude-system">隐藏系统</label>
+          </div>
+          <button class="btn-icon" id="refresh-btn" title="刷新">↻</button>
         </div>
       </div>
 
-      <div class="table-wrapper">
-        <table id="port-table">
-          <thead>
-            <tr>
-              <th style="width: 70px">端口</th>
-              <th style="width: 55px">协议</th>
-              <th style="width: 120px">监听地址</th>
-              <th style="width: 70px">PID</th>
-              <th style="min-width: 180px">应用程序</th>
-              <th style="width: 80px">用户</th>
-            </tr>
-          </thead>
-          <tbody id="port-tbody"></tbody>
-        </table>
+      <!-- Main Content -->
+      <main class="main">
+        <div class="stats-bar" id="stats">
+          <div class="stat-pill">
+            <span>⏱</span>
+            <span class="value" id="stat-time">--:--:--</span>
+          </div>
+          <div class="stat-pill">
+            <span>📦</span>
+            <span class="value" id="stat-apps">0</span>
+            <span>应用</span>
+          </div>
+          <div class="stat-pill">
+            <span>🔌</span>
+            <span class="value" id="stat-ports">0</span>
+            <span>端口</span>
+          </div>
+        </div>
+
+        <div class="table-wrapper">
+          <table id="port-table">
+            <thead>
+              <tr>
+                <th style="width: 70px">端口</th>
+                <th style="width: 55px">协议</th>
+                <th style="width: 120px">监听地址</th>
+                <th style="width: 70px">PID</th>
+                <th style="min-width: 180px">应用程序</th>
+                <th style="width: 80px">用户</th>
+              </tr>
+            </thead>
+            <tbody id="port-tbody"></tbody>
+          </table>
+        </div>
+
+        <div id="group-view" class="group-view hidden"></div>
+      </main>
+    </div>
+
+    <!-- 网络扫描页面 -->
+    <div id="page-network" class="page hidden">
+      <!-- Toolbar -->
+      <div class="toolbar">
+        <div class="toolbar-left">
+          <div class="search-field" style="width: 200px;">
+            <span class="icon">🌐</span>
+            <select id="subnet-select">
+              <option value="">检测中...</option>
+            </select>
+          </div>
+          <button class="btn-primary" id="scan-devices-btn">🔍 扫描设备</button>
+        </div>
+
+        <div class="toolbar-right">
+          <div class="stat-pill">
+            <span>📡</span>
+            <span class="value" id="net-stat-devices">0</span>
+            <span>设备</span>
+          </div>
+          <button class="btn-icon" id="refresh-network-btn" title="刷新">↻</button>
+        </div>
       </div>
 
-      <div id="group-view" class="group-view hidden"></div>
-    </main>
+      <main class="main network-main">
+        <!-- 设备列表 -->
+        <div class="network-panel devices-panel">
+          <div class="panel-header">
+            <span>📡 发现的设备</span>
+            <span class="panel-badge" id="device-count">0</span>
+          </div>
+
+          <!-- 手动输入 IP/域名 -->
+          <div class="manual-target-input">
+            <input type="text" id="manual-target" placeholder="输入 IP 或域名 (如 192.168.1.1 或 example.com)" />
+            <button class="btn-primary" id="add-manual-target">➕ 添加</button>
+          </div>
+
+          <div class="device-list" id="device-list">
+            <div class="empty-state">
+              <div class="icon">🔍</div>
+              <div>点击"扫描设备"或手动输入目标</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 端口扫描面板 -->
+        <div class="network-panel ports-panel">
+          <div class="panel-header">
+            <span>🔌 端口扫描</span>
+            <span class="panel-subtitle" id="selected-device-ip">未选择设备</span>
+          </div>
+          <div class="port-scan-controls">
+            <select id="scan-type">
+              <option value="common">常用端口</option>
+              <option value="quick">快速 (1-1000)</option>
+              <option value="full">完整 (1-65535)</option>
+              <option value="custom">自定义</option>
+            </select>
+            <input type="number" id="port-start" placeholder="起始" value="1" style="width: 80px; display: none;">
+            <input type="number" id="port-end" placeholder="结束" value="1000" style="width: 80px; display: none;">
+            <button class="btn-primary" id="scan-ports-btn" disabled>扫描端口</button>
+          </div>
+
+          <!-- 设备操作按钮 -->
+          <div class="device-actions" id="device-actions" style="display: none;">
+            <button class="btn-secondary" id="ping-btn">📡 Ping</button>
+            <button class="btn-secondary" id="trace-btn">🔀 Traceroute</button>
+            <button class="btn-secondary" id="multi-ping-btn">📊 多设备监测</button>
+          </div>
+
+          <div class="port-results" id="port-results">
+            <div class="empty-state">
+              <div class="icon">🔌</div>
+              <div>选择设备后可扫描端口</div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- 网络监测页面 -->
+    <div id="page-monitor" class="page hidden">
+      <div class="monitor-container">
+        <div class="monitor-header">
+          <h2>📊 网络质量监测</h2>
+          <div class="monitor-controls">
+            <select id="monitor-subnet">
+              <option value="">选择网段...</option>
+            </select>
+            <button class="btn-primary" id="start-monitor-btn">▶ 开始监测</button>
+            <button class="btn-secondary" id="stop-monitor-btn" style="display: none;">⏹ 停止</button>
+          </div>
+        </div>
+
+        <div class="monitor-stats" id="monitor-stats">
+          <div class="stat-card">
+            <div class="stat-value" id="mon-devices">0</div>
+            <div class="stat-label">监测设备</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="mon-online">0</div>
+            <div class="stat-label">在线</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="mon-avg-latency">-</div>
+            <div class="stat-label">平均延迟</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="mon-best">-</div>
+            <div class="stat-label">最佳设备</div>
+          </div>
+        </div>
+
+        <div class="spectrum-wrapper">
+          <canvas id="monitor-canvas" width="800" height="400"></canvas>
+        </div>
+
+        <div class="monitor-legend">
+          <span class="legend-item"><span class="legend-color" style="background: #00ff00;"></span> &lt;30ms</span>
+          <span class="legend-item"><span class="legend-color" style="background: #ffaa00;"></span> 30-80ms</span>
+          <span class="legend-item"><span class="legend-color" style="background: #ff3b30;"></span> &gt;80ms</span>
+          <span class="legend-item"><span class="legend-color" style="background: rgba(255,59,48,0.3);"></span>
+            超时</span>
+        </div>
+
+        <div class="device-grid" id="device-grid"></div>
+      </div>
+    </div>
   </div>
 
   <script type="module" src="/src/main.ts"></script>

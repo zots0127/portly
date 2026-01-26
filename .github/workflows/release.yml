@@ -6,35 +6,7 @@ on:
       - "v*"
 
 jobs:
-  create-release:
-    permissions:
-      contents: write
-    runs-on: ubuntu-22.04
-    outputs:
-      release_id: ${{ steps.create-release.outputs.id }}
-    steps:
-      - name: Create Release
-        id: create-release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref_name }}
-          release_name: "Portly ${{ github.ref_name }}"
-          body: |
-            ## 📦 Downloads
-
-            | Platform | GUI | CLI |
-            |----------|-----|-----|
-            | macOS (Apple Silicon) | `.dmg` | `portly-cli` |
-            | macOS (Intel) | `.dmg` | `portly-cli` |
-            | Windows | `.msi` | `portly-cli.exe` |
-            | Linux | `.deb` / `.AppImage` | `portly-cli` |
-          draft: false
-          prerelease: false
-
   build:
-    needs: create-release
     permissions:
       contents: write
     strategy:
@@ -84,46 +56,22 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          releaseId: ${{ needs.create-release.outputs.release_id }}
+          tagName: ${{ github.ref_name }}
+          releaseName: "Portly ${{ github.ref_name }}"
+          releaseBody: |
+            ## 📦 Portly ${{ github.ref_name }}
+
+            ### Downloads
+            | Platform | Architecture | Download |
+            |----------|--------------|----------|
+            | macOS | Apple Silicon | `.dmg` |
+            | macOS | Intel | `.dmg` |  
+            | Windows | x64 | `.msi` |
+            | Linux | x64 | `.deb` / `.AppImage` |
+
+            ### Changes
+            - 修复网络监测热力图 Canvas 渲染问题
+            - 改进高 DPI 显示支持
+          releaseDraft: false
+          prerelease: false
           args: ${{ matrix.args }}
-
-      - name: Build CLI
-        run: |
-          cd src-tauri
-          cargo build --release --bin portly-cli
-
-      - name: Upload CLI (macOS)
-        if: matrix.platform == 'macos-latest'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: src-tauri/target/${{ matrix.target }}/release/portly-cli
-          asset_name: portly-cli-${{ matrix.target }}
-          asset_content_type: application/octet-stream
-        continue-on-error: true
-
-      - name: Upload CLI (Linux)
-        if: matrix.platform == 'ubuntu-22.04'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: src-tauri/target/release/portly-cli
-          asset_name: portly-cli-linux-x86_64
-          asset_content_type: application/octet-stream
-        continue-on-error: true
-
-      - name: Upload CLI (Windows)
-        if: matrix.platform == 'windows-latest'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: src-tauri/target/release/portly-cli.exe
-          asset_name: portly-cli-windows-x86_64.exe
-          asset_content_type: application/octet-stream
-        continue-on-error: true

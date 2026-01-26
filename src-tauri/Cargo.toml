@@ -1,6 +1,6 @@
 [package]
 name = "portly"
-version = "0.2.3"
+version = "0.2.4"
 description = "Portly - 跨平台端口扫描器 / Cross-platform port scanner"
 authors = ["kanshan"]
 edition = "2021"

@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 jobs:
   release:
@@ -20,14 +20,14 @@ jobs:
             args: --target x86_64-apple-darwin
             target: x86_64-apple-darwin
           - platform: ubuntu-22.04
-            args: ''
+            args: ""
             target: x86_64-unknown-linux-gnu
           - platform: windows-latest
-            args: ''
+            args: ""
             target: x86_64-pc-windows-msvc
 
     runs-on: ${{ matrix.platform }}
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -38,7 +38,7 @@ jobs:
           node-version: 20
 
       - name: Install Rust stable
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
@@ -56,20 +56,20 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: v__VERSION__
-          releaseName: 'Portly v__VERSION__'
+          tagName: ${{ github.ref_name }}
+          releaseName: "Portly ${{ github.ref_name }}"
           releaseBody: |
             ## 📦 Downloads
-            
+
             | Platform | Download |
             |----------|----------|
             | macOS (Apple Silicon) | `.dmg` |
             | macOS (Intel) | `.dmg` |
             | Windows | `.msi` / `.exe` |
             | Linux | `.deb` / `.AppImage` |
-            
+
             ## 🔧 CLI Only
-            
+
             如果只需要命令行工具，请下载 `portly-cli` 文件。
           releaseDraft: true
           prerelease: false

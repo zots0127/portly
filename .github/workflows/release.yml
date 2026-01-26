@@ -57,21 +57,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: "Portly ${{ github.ref_name }}"
-          releaseBody: |
-            ## 📦 Portly ${{ github.ref_name }}
-
-            ### Downloads
-            | Platform | Architecture | Download |
-            |----------|--------------|----------|
-            | macOS | Apple Silicon | `.dmg` |
-            | macOS | Intel | `.dmg` |  
-            | Windows | x64 | `.msi` |
-            | Linux | x64 | `.deb` / `.AppImage` |
-
-            ### Changes
-            - 修复网络监测热力图 Canvas 渲染问题
-            - 改进高 DPI 显示支持
+          releaseName: Portly ${{ github.ref_name }}
+          releaseBody: "修复网络监测热力图 Canvas 渲染问题，改进高 DPI 显示支持"
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}

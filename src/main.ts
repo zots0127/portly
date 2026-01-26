@@ -99,12 +99,10 @@ const portResults = document.getElementById("port-results") as HTMLDivElement;
 
 // ===== 状态 =====
 let currentView: "table" | "group" = "table";
-let currentPage: "local" | "network" | "monitor" = "local";
 let isLoading = false;
 let selectedDevice: NetworkDevice | null = null;
 let discoveredDevices: NetworkDevice[] = [];
 let sourceFilter: "all" | "local" | "docker" = "all";
-let cachedDockerPorts: Map<number, string> = new Map();
 
 // 来源筛选按钮
 const sourceFilterBtns = document.querySelectorAll("#source-filter .segment");
@@ -122,7 +120,7 @@ const tabMonitor = document.getElementById("tab-monitor") as HTMLButtonElement;
 const pageMonitor = document.getElementById("page-monitor") as HTMLDivElement;
 
 function switchPage(page: "local" | "network" | "monitor") {
-  currentPage = page;
+  // Switch to the specified page
 
   // 清除所有 Tab 的 active 状态
   tabLocal.classList.remove("active");
@@ -202,7 +200,6 @@ async function scanPorts() {
     }
 
     // 来源筛选
-    cachedDockerPorts = dockerPorts;
     if (sourceFilter === "docker") {
       filteredPorts = filteredPorts.filter(p => dockerPorts.has(p.port));
     } else if (sourceFilter === "local") {
@@ -696,17 +693,7 @@ showCommand.addEventListener("change", () => {
 });
 
 // ===== Ping/Traceroute =====
-interface PingResult {
-  ip: string;
-  is_reachable: boolean;
-  packets_sent: number;
-  packets_received: number;
-  packet_loss: number;
-  min_ms?: number;
-  avg_ms?: number;
-  max_ms?: number;
-  raw_output: string;
-}
+// PingResult interface removed (unused)
 
 interface TraceHop {
   hop: number;
@@ -721,7 +708,6 @@ interface TracerouteResult {
   raw_output: string;
 }
 
-const deviceActions = document.getElementById("device-actions") as HTMLDivElement;
 const pingBtn = document.getElementById("ping-btn") as HTMLButtonElement;
 const traceBtn = document.getElementById("trace-btn") as HTMLButtonElement;
 

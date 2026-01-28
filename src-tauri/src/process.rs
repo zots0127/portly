@@ -4,6 +4,13 @@
 use serde::{Deserialize, Serialize};
 use std::process::Command;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
+// Windows CREATE_NO_WINDOW flag to hide console windows
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
 /// Result of a process kill operation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KillResult {
@@ -78,6 +85,7 @@ pub fn get_process_info(pid: u32) -> Option<ProcessInfo> {
 pub fn get_process_info(pid: u32) -> Option<ProcessInfo> {
     let output = Command::new("tasklist")
         .args(["/FI", &format!("PID eq {}", pid), "/FO", "CSV", "/NH"])
+        .creation_flags(CREATE_NO_WINDOW)
         .output()
         .ok()?;
     
@@ -177,6 +185,7 @@ pub fn kill_process(pid: u32, force: bool) -> KillResult {
     
     let output = Command::new("taskkill")
         .args(&args)
+        .creation_flags(CREATE_NO_WINDOW)
         .output();
     
     match output {
@@ -263,6 +272,7 @@ pub fn kill_port_process(port: u16) -> KillResult {
         // Use netstat to find PID
         let output = Command::new("netstat")
             .args(["-ano"])
+            .creation_flags(CREATE_NO_WINDOW)
             .output();
         
         match output {

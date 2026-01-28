@@ -6,6 +6,13 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::process::Command;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
+// Windows CREATE_NO_WINDOW flag to hide console windows
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
 /// 端口信息结构
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PortInfo {
@@ -117,7 +124,11 @@ fn get_ports_linux() -> Vec<PortInfo> {
 /// Windows: 使用 netstat
 #[cfg(target_os = "windows")]
 fn get_ports_windows() -> Vec<PortInfo> {
-    let output = match Command::new("netstat").args(["-ano"]).output() {
+    let output = match Command::new("netstat")
+        .args(["-ano"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output() 
+    {
         Ok(o) => o,
         Err(_) => return Vec::new(),
     };

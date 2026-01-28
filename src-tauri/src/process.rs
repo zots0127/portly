@@ -169,7 +169,8 @@ pub fn kill_process(pid: u32, force: bool) -> KillResult {
         }
     }
     
-    let mut args = vec!["/PID", &pid.to_string()];
+    let pid_str = pid.to_string();
+    let mut args = vec!["/PID", &pid_str];
     if force {
         args.push("/F");
     }

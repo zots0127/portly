@@ -31,6 +31,10 @@ serde_json = "1"
 chrono = "0.4"
 tokio = { version = "1", features = ["net", "time", "rt-multi-thread", "sync"] }
 local-ip-address = "0.6"
+dirs = "5"
+
+# pnet only for non-Windows platforms (requires Npcap SDK on Windows)
+[target.'cfg(not(target_os = "windows"))'.dependencies]
 pnet = "0.35"
 
 [dev-dependencies]

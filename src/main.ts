@@ -61,6 +61,33 @@ interface DockerContainer {
   ports: DockerPort[];
 }
 
+// ===== 进程管理类型 =====
+interface KillResult {
+  success: boolean;
+  pid: number;
+  message: string;
+}
+
+interface ProcessInfo {
+  pid: number;
+  name: string;
+  is_system: boolean;
+}
+
+// ===== 导出类型 =====
+interface ExportResult {
+  success: boolean;
+  path: string | null;
+  message: string;
+  record_count: number;
+}
+
+interface HistorySummary {
+  timestamp: string;
+  port_count: number;
+  scan_duration_ms: number;
+}
+
 // ===== DOM 元素 =====
 // Tab 切换
 const tabLocal = document.getElementById("tab-local") as HTMLButtonElement;
@@ -214,6 +241,10 @@ async function scanPorts() {
     statApps.textContent = uniqueApps.toString();
     statPorts.textContent = filteredPorts.length.toString();
 
+    // 保存结果用于导出
+    lastScanResult = result;
+    lastFilteredPorts = filteredPorts;
+
     if (currentView === "table") {
       renderTable(filteredPorts, includeCommand, dockerPorts);
     }
@@ -280,21 +311,96 @@ function renderTable(ports: PortInfo[], showCmd: boolean, dockerPorts?: Map<numb
 
     const row = document.createElement("tr");
     row.className = isDocker ? "docker-row" : "";
-    row.innerHTML = `
-      <td class="cell-port">
-        <span class="port-type-icon">${typeIcon}</span>
-        <span class="port-number">${p.port}</span>
-        <span class="port-service-tag" title="${service.name}">${service.icon} ${service.name}</span>
-      </td>
-      <td><span class="cell-protocol ${p.protocol.toLowerCase()}">${p.protocol}</span></td>
-      <td class="cell-address">${p.address}</td>
-      <td class="cell-pid">${p.pid}</td>
-      <td class="cell-process">${processDisplay}</td>
-      <td class="cell-user">
-        ${p.user}
-        ${service.canOpen ? `<button class="port-open-btn" data-port="${p.port}" data-protocol="${service.protocol}" title="在浏览器中打开">🔗</button>` : ''}
-      </td>
+
+    // 创建各个单元格
+    const cellPort = document.createElement("td");
+    cellPort.className = "cell-port";
+    cellPort.innerHTML = `
+      <span class="port-type-icon">${typeIcon}</span>
+      <span class="port-number">${p.port}</span>
+      <span class="port-service-tag" title="${service.name}">${service.icon} ${service.name}</span>
     `;
+
+    const cellProtocol = document.createElement("td");
+    cellProtocol.innerHTML = `<span class="cell-protocol ${p.protocol.toLowerCase()}">${p.protocol}</span>`;
+
+    const cellAddress = document.createElement("td");
+    cellAddress.className = "cell-address";
+    cellAddress.textContent = p.address;
+
+    const cellPid = document.createElement("td");
+    cellPid.className = "cell-pid";
+    cellPid.textContent = p.pid;
+
+    const cellProcess = document.createElement("td");
+    cellProcess.className = "cell-process";
+    cellProcess.innerHTML = processDisplay;
+
+    const cellActions = document.createElement("td");
+    cellActions.className = "cell-actions";
+
+    // 创建打开按钮
+    if (service.canOpen) {
+      const openBtn = document.createElement("button");
+      openBtn.className = "port-open-btn action-btn";
+      openBtn.title = "在浏览器中打开";
+      openBtn.textContent = "🔗";
+      openBtn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const url = `${service.protocol}://localhost:${p.port}`;
+        try {
+          await openUrl(url);
+        } catch (error) {
+          console.error("Failed to open URL:", error);
+          window.open(url, "_blank");
+        }
+      });
+      cellActions.appendChild(openBtn);
+    }
+
+    // 创建终止按钮
+    const killBtn = document.createElement("button");
+    killBtn.className = "port-kill-btn action-btn";
+    killBtn.title = "终止进程";
+    killBtn.textContent = "🔴";
+    killBtn.onclick = async (e) => {
+      console.log("=== KILL BUTTON CLICKED ===", p.pid, p.process);
+      e.preventDefault();
+      e.stopPropagation();
+
+      const pid = parseInt(p.pid);
+      if (isNaN(pid) || pid === 0) {
+        showToast("❌ 无效的进程 ID", "error");
+        return;
+      }
+
+      const confirmed = confirm(`确定要终止进程 "${p.process}" (PID: ${pid}, 端口: ${p.port}) 吗？\n\n此操作不可撤销。`);
+      if (!confirmed) return;
+
+      try {
+        const result: KillResult = await invoke("tauri_kill_process", { pid, force: false });
+        if (result.success) {
+          await scanPorts();
+          showToast(`✅ ${result.message}`, "success");
+        } else {
+          showToast(`❌ ${result.message}`, "error");
+        }
+      } catch (error) {
+        console.error("Kill process failed:", error);
+        showToast(`❌ 终止进程失败: ${error}`, "error");
+      }
+    };
+    console.log("Kill button created for PID:", p.pid);
+    cellActions.appendChild(killBtn);
+
+    // 组装行
+    row.appendChild(cellPort);
+    row.appendChild(cellProtocol);
+    row.appendChild(cellAddress);
+    row.appendChild(cellPid);
+    row.appendChild(cellProcess);
+    row.appendChild(cellActions);
     portTbody.appendChild(row);
 
     if (showCmd && p.command) {
@@ -306,24 +412,77 @@ function renderTable(ports: PortInfo[], showCmd: boolean, dockerPorts?: Map<numb
       portTbody.appendChild(cmdRow);
     }
   }
+}
 
-  // 添加点击事件打开浏览器
+// 初始化表格点击事件（只执行一次）
+let tableClickHandlerInitialized = false;
+function initTableClickHandler() {
+  if (tableClickHandlerInitialized) return;
+  tableClickHandlerInitialized = true;
+
   portTbody.addEventListener("click", async (e) => {
-    const btn = (e.target as HTMLElement).closest(".port-open-btn") as HTMLElement;
-    if (btn) {
-      const port = btn.dataset.port;
-      const protocol = btn.dataset.protocol || "http";
+    const target = e.target as HTMLElement;
+    console.log("Click detected on:", target.tagName, target.className);
+
+    // 处理打开按钮
+    const openBtn = target.closest(".port-open-btn") as HTMLElement;
+    if (openBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const port = openBtn.dataset.port;
+      const protocol = openBtn.dataset.protocol || "http";
       const url = `${protocol}://localhost:${port}`;
+      console.log("Open URL:", url);
       try {
         await openUrl(url);
       } catch (error) {
         console.error("Failed to open URL:", error);
-        // 回退到 window.open
         window.open(url, "_blank");
+      }
+      return;
+    }
+
+    // 处理终止进程按钮
+    const killBtn = target.closest(".port-kill-btn") as HTMLElement;
+    if (killBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log("Kill button clicked!", killBtn.dataset);
+
+      const pid = parseInt(killBtn.dataset.pid || "0");
+      const port = killBtn.dataset.port;
+      const processName = killBtn.dataset.process;
+
+      if (pid === 0) {
+        console.log("PID is 0, skipping");
+        return;
+      }
+
+      // 确认对话框
+      const confirmed = confirm(`确定要终止进程 "${processName}" (PID: ${pid}, 端口: ${port}) 吗？\n\n此操作不可撤销。`);
+      if (!confirmed) return;
+
+      try {
+        const result: KillResult = await invoke("tauri_kill_process", { pid, force: false });
+        if (result.success) {
+          // 刷新端口列表
+          await scanPorts();
+          showToast(`✅ ${result.message}`, "success");
+        } else {
+          showToast(`❌ ${result.message}`, "error");
+        }
+      } catch (error) {
+        console.error("Kill process failed:", error);
+        showToast(`❌ 终止进程失败: ${error}`, "error");
       }
     }
   });
+
+  console.log("Table click handler initialized on:", portTbody);
 }
+
+// 在页面加载时初始化
+initTableClickHandler();
 
 async function scanGrouped() {
   if (isLoading) return;
@@ -399,6 +558,107 @@ function renderGroups(groups: AppGroup[]) {
 function truncate(str: string, maxLen: number): string {
   return str.length > maxLen ? str.substring(0, maxLen) + "…" : str;
 }
+
+// ===== Toast 通知 =====
+function showToast(message: string, type: "success" | "error" | "info" = "info") {
+  // 创建或获取 toast 容器
+  let container = document.getElementById("toast-container");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "toast-container";
+    container.style.cssText = `
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 10000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    `;
+    document.body.appendChild(container);
+  }
+
+  const toast = document.createElement("div");
+  toast.className = `toast toast-${type}`;
+  toast.style.cssText = `
+    padding: 12px 20px;
+    border-radius: 8px;
+    color: white;
+    font-size: 13px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    animation: slideIn 0.3s ease;
+    max-width: 400px;
+    background: ${type === "success" ? "#22c55e" : type === "error" ? "#ef4444" : "#3b82f6"};
+  `;
+  toast.textContent = message;
+  container.appendChild(toast);
+
+  // 3秒后移除
+  setTimeout(() => {
+    toast.style.animation = "slideOut 0.3s ease";
+    setTimeout(() => toast.remove(), 300);
+  }, 3000);
+}
+
+// ===== 导出功能 =====
+let lastScanResult: ScanResult | null = null;
+let lastFilteredPorts: PortInfo[] = [];
+
+async function exportData(format: "csv" | "json" | "txt") {
+  if (lastFilteredPorts.length === 0) {
+    showToast("没有可导出的数据，请先扫描端口", "error");
+    return;
+  }
+
+  try {
+    const result: ExportResult = await invoke("tauri_export_auto", {
+      ports: lastFilteredPorts,
+      scanResult: lastScanResult || { scan_time: new Date().toISOString(), total_ports: lastFilteredPorts.length, unique_apps: 0, ports: lastFilteredPorts, scan_time_ms: 0 },
+      format
+    });
+
+    if (result.success) {
+      showToast(`✅ ${result.message}\n📁 ${result.path}`, "success");
+    } else {
+      showToast(`❌ ${result.message}`, "error");
+    }
+  } catch (error) {
+    console.error("Export failed:", error);
+    showToast(`❌ 导出失败: ${error}`, "error");
+  }
+}
+
+// 绑定导出按钮事件
+document.addEventListener("DOMContentLoaded", () => {
+  const exportBtn = document.getElementById("export-btn");
+  const exportMenu = document.getElementById("export-menu");
+
+  exportBtn?.addEventListener("click", () => {
+    exportMenu?.classList.toggle("visible");
+  });
+
+  document.getElementById("export-csv")?.addEventListener("click", () => {
+    exportData("csv");
+    exportMenu?.classList.remove("visible");
+  });
+
+  document.getElementById("export-json")?.addEventListener("click", () => {
+    exportData("json");
+    exportMenu?.classList.remove("visible");
+  });
+
+  document.getElementById("export-txt")?.addEventListener("click", () => {
+    exportData("txt");
+    exportMenu?.classList.remove("visible");
+  });
+
+  // 点击其他地方关闭菜单
+  document.addEventListener("click", (e) => {
+    if (!exportBtn?.contains(e.target as Node) && !exportMenu?.contains(e.target as Node)) {
+      exportMenu?.classList.remove("visible");
+    }
+  });
+});
 
 function switchView(view: "table" | "group") {
   currentView = view;

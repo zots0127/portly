@@ -54,6 +54,14 @@
             <input type="checkbox" class="toggle" id="exclude-system" />
             <label class="toggle-label" for="exclude-system">隐藏系统</label>
           </div>
+          <div class="export-wrapper">
+            <button class="btn-secondary" id="export-btn" title="导出数据">📁 导出</button>
+            <div class="export-menu" id="export-menu">
+              <button id="export-csv">📊 CSV 格式</button>
+              <button id="export-json">📄 JSON 格式</button>
+              <button id="export-txt">📝 文本格式</button>
+            </div>
+          </div>
           <button class="btn-icon" id="refresh-btn" title="刷新">↻</button>
         </div>
       </div>
@@ -86,7 +94,7 @@
                 <th style="width: 120px">监听地址</th>
                 <th style="width: 70px">PID</th>
                 <th style="min-width: 180px">应用程序</th>
-                <th style="width: 80px">用户</th>
+                <th style="width: 100px">操作</th>
               </tr>
             </thead>
             <tbody id="port-tbody"></tbody>

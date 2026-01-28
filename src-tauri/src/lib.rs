@@ -4,10 +4,14 @@ mod core;
 mod network;
 mod advanced_scan;
 mod docker;
+mod process;
+mod export;
 
 pub use core::*;
 pub use network::*;
 pub use docker::*;
+pub use process::*;
+pub use export::*;
 
 use tokio::task::spawn_blocking;
 
@@ -192,6 +196,76 @@ fn tauri_resolve_target(target: String) -> Result<network::ResolveResult, String
     network::resolve_target(&target)
 }
 
+// ===== 进程管理命令 =====
+
+/// Tauri 命令: 终止进程
+#[tauri::command]
+fn tauri_kill_process(pid: u32, force: bool) -> process::KillResult {
+    process::kill_process(pid, force)
+}
+
+/// Tauri 命令: 终止占用端口的进程
+#[tauri::command]
+fn tauri_kill_port(port: u16) -> process::KillResult {
+    process::kill_port_process(port)
+}
+
+/// Tauri 命令: 获取进程信息
+#[tauri::command]
+fn tauri_get_process_info(pid: u32) -> Option<process::ProcessInfo> {
+    process::get_process_info(pid)
+}
+
+// ===== 导出命令 =====
+
+/// Tauri 命令: 导出到 CSV
+#[tauri::command]
+fn tauri_export_csv(ports: Vec<core::PortInfo>, path: String) -> export::ExportResult {
+    export::export_to_csv(&ports, &path)
+}
+
+/// Tauri 命令: 导出到 JSON
+#[tauri::command]
+fn tauri_export_json(scan_result: core::ScanResult, path: String) -> export::ExportResult {
+    export::export_to_json(&scan_result, &path)
+}
+
+/// Tauri 命令: 导出到文本
+#[tauri::command]
+fn tauri_export_txt(ports: Vec<core::PortInfo>, path: String) -> export::ExportResult {
+    export::export_to_txt(&ports, &path)
+}
+
+/// Tauri 命令: 自动导出（使用默认路径）
+#[tauri::command]
+fn tauri_export_auto(ports: Vec<core::PortInfo>, scan_result: core::ScanResult, format: String) -> export::ExportResult {
+    let export_format = match format.to_lowercase().as_str() {
+        "csv" => export::ExportFormat::Csv,
+        "json" => export::ExportFormat::Json,
+        "txt" => export::ExportFormat::Txt,
+        _ => export::ExportFormat::Csv,
+    };
+    export::export_auto(&ports, &scan_result, export_format)
+}
+
+/// Tauri 命令: 获取默认导出目录
+#[tauri::command]
+fn tauri_get_export_dir() -> String {
+    export::get_default_export_dir().to_string_lossy().to_string()
+}
+
+/// Tauri 命令: 获取扫描历史摘要
+#[tauri::command]
+fn tauri_get_history_summary() -> Vec<export::HistorySummary> {
+    export::get_history_summary()
+}
+
+/// Tauri 命令: 保存扫描到历史
+#[tauri::command]
+fn tauri_save_to_history(scan_result: core::ScanResult) -> Result<(), String> {
+    export::save_to_history(&scan_result)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -221,8 +295,21 @@ pub fn run() {
             tauri_get_docker_containers,
             tauri_get_docker_port_info,
             // IP/域名解析
-            tauri_resolve_target
+            tauri_resolve_target,
+            // 进程管理
+            tauri_kill_process,
+            tauri_kill_port,
+            tauri_get_process_info,
+            // 导出
+            tauri_export_csv,
+            tauri_export_json,
+            tauri_export_txt,
+            tauri_export_auto,
+            tauri_get_export_dir,
+            tauri_get_history_summary,
+            tauri_save_to_history
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+

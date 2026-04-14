@@ -1,14 +1,19 @@
 {
   "name": "portly",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.4",
   "description": "Portly - Cross-platform port scanner",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc -p tsconfig.app.json && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "test": "vitest",
+    "precheck:lan-e2e": "node scripts/network-lan-precheck.mjs",
+    "test:lan-e2e": "npm run precheck:lan-e2e && vitest tests/integration/network-lan.e2e.test.ts",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
@@ -16,7 +21,14 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/user-event": "^14.6.1",
+    "@vitest/ui": "^4.0.18",
+    "happy-dom": "^20.6.2",
+    "jsdom": "^28.1.0",
     "typescript": "~5.6.2",
-    "vite": "^6.0.3"
+    "vite": "^6.0.3",
+    "vitest": "^4.0.18"
   }
 }

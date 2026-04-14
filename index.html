@@ -16,6 +16,9 @@
       <button class="tab active" id="tab-local">🔌 本地端口</button>
       <button class="tab" id="tab-network">🌐 网络扫描</button>
       <button class="tab" id="tab-monitor">📊 网络监测</button>
+      <button class="tab" id="tab-dns">🌐 DNS</button>
+      <button class="tab" id="tab-whois">🔍 Whois</button>
+      <button class="tab" id="tab-ssl">🔒 SSL</button>
     </div>
 
     <!-- 本地端口页面 -->
@@ -116,6 +119,10 @@
               <option value="">检测中...</option>
             </select>
           </div>
+          <div class="search-field" style="width: 260px;">
+            <span class="icon">🔒</span>
+            <input type="text" id="manual-subnet" placeholder="手动网段（可选）：192.168.1.0/24" />
+          </div>
           <button class="btn-primary" id="scan-devices-btn">🔍 扫描设备</button>
         </div>
 
@@ -195,6 +202,10 @@
             <select id="monitor-subnet">
               <option value="">选择网段...</option>
             </select>
+            <div class="search-field" style="width: 240px;">
+              <span class="icon">🔒</span>
+              <input type="text" id="monitor-manual-subnet" placeholder="手动网段（可选）：192.168.1.0/24" />
+            </div>
             <button class="btn-primary" id="start-monitor-btn">▶ 开始监测</button>
             <button class="btn-secondary" id="stop-monitor-btn" style="display: none;">⏹ 停止</button>
           </div>
@@ -232,6 +243,229 @@
         </div>
 
         <div class="device-grid" id="device-grid"></div>
+      </div>
+    </div>
+
+    <!-- DNS 查询页面 -->
+    <div id="page-dns" class="page hidden">
+      <div class="dns-container">
+        <div class="dns-header">
+          <h2>🌐 DNS 查询</h2>
+          <div class="dns-search">
+            <input type="text" id="dns-domain-input" placeholder="输入域名 (如 example.com)" />
+            <select id="dns-record-type">
+              <option value="A">A (IPv4)</option>
+              <option value="AAAA">AAAA (IPv6)</option>
+              <option value="CNAME">CNAME</option>
+              <option value="MX">MX (邮件)</option>
+              <option value="TXT">TXT</option>
+              <option value="NS">NS</option>
+              <option value="SOA">SOA</option>
+            </select>
+            <select id="dns-server">
+              <option value="">自动</option>
+              <option value="8.8.8.8">Google 8.8.8.8</option>
+              <option value="1.1.1.1">Cloudflare 1.1.1.1</option>
+              <option value="223.5.5.5">阿里 DNS</option>
+              <option value="119.29.29.29">腾讯 DNS</option>
+            </select>
+            <button class="btn-primary" id="dns-query-btn">查询</button>
+          </div>
+        </div>
+
+        <div id="dns-loading" class="whois-loading hidden">
+          <div class="spinner"></div>
+          <span>正在查询...</span>
+        </div>
+
+        <div id="dns-error" class="whois-error hidden"></div>
+
+        <div id="dns-results" class="dns-results hidden">
+          <div class="dns-summary">
+            <div class="dns-summary-card">
+              <div class="dns-label">域名</div>
+              <div class="dns-value dns-domain" id="dns-domain">-</div>
+            </div>
+            <div class="dns-summary-card">
+              <div class="dns-label">记录类型</div>
+              <div class="dns-value" id="dns-type">-</div>
+            </div>
+            <div class="dns-summary-card">
+              <div class="dns-label">记录数</div>
+              <div class="dns-value" id="dns-count">-</div>
+            </div>
+            <div class="dns-summary-card">
+              <div class="dns-label">查询时间</div>
+              <div class="dns-value" id="dns-time">-</div>
+            </div>
+          </div>
+
+          <div class="dns-records-section">
+            <h3>查询结果</h3>
+            <div class="dns-records-list" id="dns-records-list">
+              <span class="whois-empty">无记录</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Whois 查询页面 -->
+    <div id="page-whois" class="page hidden">
+      <div class="whois-container">
+        <div class="whois-header">
+          <h2>🔍 Whois 域名查询</h2>
+          <div class="whois-search">
+            <input type="text" id="whois-input" placeholder="输入域名 (如 example.com)" />
+            <button class="btn-primary" id="whois-query-btn">查询</button>
+          </div>
+        </div>
+
+        <div id="whois-loading" class="whois-loading hidden">
+          <div class="spinner"></div>
+          <span>正在查询...</span>
+        </div>
+
+        <div id="whois-error" class="whois-error hidden"></div>
+
+        <div id="whois-results" class="whois-results hidden">
+          <div class="whois-summary">
+            <div class="whois-summary-card">
+              <div class="whois-label">域名</div>
+              <div class="whois-value whois-domain" id="whois-domain">-</div>
+            </div>
+            <div class="whois-summary-card">
+              <div class="whois-label">注册商</div>
+              <div class="whois-value" id="whois-registrar">-</div>
+            </div>
+            <div class="whois-summary-card">
+              <div class="whois-label">注册时间</div>
+              <div class="whois-value" id="whois-created">-</div>
+            </div>
+            <div class="whois-summary-card">
+              <div class="whois-label">过期时间</div>
+              <div class="whois-value" id="whois-expires">-</div>
+            </div>
+          </div>
+
+          <div class="whois-details">
+            <div class="whois-section">
+              <h3>状态</h3>
+              <div class="whois-tags" id="whois-status"></div>
+            </div>
+
+            <div class="whois-section">
+              <h3>域名服务器</h3>
+              <div class="whois-nameservers" id="whois-nameservers"></div>
+            </div>
+
+            <div class="whois-section" id="whois-dnssec-section">
+              <h3>DNSSEC</h3>
+              <div class="whois-value" id="whois-dnssec">-</div>
+            </div>
+
+            <div class="whois-section">
+              <h3>原始输出</h3>
+              <pre class="whois-raw" id="whois-raw"></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SSL 证书检查页面 -->
+    <div id="page-ssl" class="page hidden">
+      <div class="ssl-container">
+        <div class="ssl-header">
+          <h2>🔒 SSL/TLS 证书检查</h2>
+          <div class="ssl-search">
+            <input type="text" id="ssl-host-input" placeholder="输入主机名或 IP (如 example.com)" />
+            <input type="number" id="ssl-port-input" placeholder="端口" value="443" style="width: 80px;" />
+            <button class="btn-primary" id="ssl-check-btn">检查证书</button>
+          </div>
+        </div>
+
+        <div id="ssl-loading" class="whois-loading hidden">
+          <div class="spinner"></div>
+          <span>正在检查...</span>
+        </div>
+
+        <div id="ssl-error" class="whois-error hidden"></div>
+
+        <div id="ssl-results" class="ssl-results hidden">
+          <!-- 证书概要 -->
+          <div class="ssl-summary">
+            <div class="ssl-summary-card">
+              <div class="ssl-label">主机</div>
+              <div class="ssl-value ssl-host" id="ssl-host">-</div>
+              <span id="ssl-self-signed" class="cert-tag self-signed hidden">自签名</span>
+            </div>
+            <div class="ssl-summary-card">
+              <div class="ssl-label">状态</div>
+              <div class="ssl-value" id="ssl-status">-</div>
+            </div>
+            <div class="ssl-summary-card">
+              <div class="ssl-label">剩余时间</div>
+              <div class="ssl-value" id="ssl-days-left">-</div>
+            </div>
+            <div class="ssl-summary-card">
+              <div class="ssl-label">密钥大小</div>
+              <div class="ssl-value" id="ssl-key-size">-</div>
+            </div>
+          </div>
+
+          <!-- 证书详情 -->
+          <div class="ssl-details">
+            <div class="ssl-section">
+              <h3>证书信息</h3>
+              <div class="ssl-info-grid">
+                <div class="ssl-info-item">
+                  <span class="ssl-info-label">主体 (CN)</span>
+                  <span class="ssl-info-value" id="ssl-subject">-</span>
+                </div>
+                <div class="ssl-info-item">
+                  <span class="ssl-info-label">颁发者</span>
+                  <span class="ssl-info-value" id="ssl-issuer">-</span>
+                </div>
+                <div class="ssl-info-item">
+                  <span class="ssl-info-label">生效时间</span>
+                  <span class="ssl-info-value" id="ssl-valid-from">-</span>
+                </div>
+                <div class="ssl-info-item">
+                  <span class="ssl-info-label">过期时间</span>
+                  <span class="ssl-info-value" id="ssl-valid-until">-</span>
+                </div>
+                <div class="ssl-info-item">
+                  <span class="ssl-info-label">签名算法</span>
+                  <span class="ssl-info-value" id="ssl-signature">-</span>
+                </div>
+                <div class="ssl-info-item">
+                  <span class="ssl-info-label">版本</span>
+                  <span class="ssl-info-value" id="ssl-version">-</span>
+                </div>
+                <div class="ssl-info-item">
+                  <span class="ssl-info-label">序列号</span>
+                  <span class="ssl-info-value ssl-serial" id="ssl-serial">-</span>
+                </div>
+                <div class="ssl-info-item">
+                  <span class="ssl-info-label">TLS 版本</span>
+                  <span class="ssl-info-value" id="ssl-tls-version">-</span>
+                </div>
+                <div class="ssl-info-item">
+                  <span class="ssl-info-label">密码套件</span>
+                  <span class="ssl-info-value" id="ssl-cipher-suite">-</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="ssl-section">
+              <h3>证书链</h3>
+              <div class="cert-chain" id="ssl-chain">
+                <span class="whois-empty">无证书链信息</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>

@@ -356,6 +356,10 @@ tr:last-child td {
   border-bottom: none;
 }
 
+tbody tr {
+  animation: fadeIn 0.2s ease;
+}
+
 tbody tr:hover td {
   background: var(--bg-hover);
 }
@@ -561,6 +565,46 @@ tbody tr:hover td {
   }
 }
 
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
 .empty-state {
   display: flex;
   flex-direction: column;
@@ -643,15 +687,26 @@ tbody tr:hover td {
   cursor: pointer;
   border-bottom: 2px solid transparent;
   transition: all 0.2s ease;
+  position: relative;
 }
 
 .tab:hover {
   color: var(--text-primary);
 }
 
+.tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent);
+  animation: slideIn 0.2s ease;
+}
+
 .tab.active {
   color: var(--accent);
-  border-bottom-color: var(--accent);
 }
 
 /* ===== Page ===== */
@@ -677,15 +732,26 @@ tbody tr:hover td {
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all 0.15s ease;
+  position: relative;
+  overflow: hidden;
 }
 
 .btn-primary:hover {
   background: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(0, 122, 255, 0.2);
 }
 
 .btn-primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 /* ===== Secondary Button ===== */
@@ -699,6 +765,21 @@ tbody tr:hover td {
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all 0.15s ease;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+
+.btn-secondary:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .btn-secondary:hover {
@@ -1935,4 +2016,602 @@ tbody tr:hover td {
 
 .mongo-doc:last-child {
   margin-bottom: 0;
+}
+
+/* ===== Whois 查询页面 ===== */
+.whois-container {
+  padding: 20px;
+  height: 100%;
+  overflow-y: auto;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.whois-header {
+  margin-bottom: 24px;
+}
+
+.whois-header h2 {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0 0 16px 0;
+  color: var(--text-primary);
+}
+
+.whois-search {
+  display: flex;
+  gap: 12px;
+}
+
+.whois-search input {
+  flex: 1;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-content);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: "SF Mono", Monaco, monospace;
+  transition: all 0.2s ease;
+}
+
+.whois-search input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.15);
+}
+
+.whois-search input::placeholder {
+  color: var(--text-tertiary);
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+
+.whois-search button {
+  padding: 12px 24px;
+  white-space: nowrap;
+}
+
+.whois-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px;
+  color: var(--text-secondary);
+}
+
+.whois-loading .spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.whois-error {
+  background: rgba(255, 59, 48, 0.1);
+  border: 1px solid var(--red);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  color: var(--red);
+  text-align: center;
+}
+
+.whois-results {
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.whois-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.whois-summary-card {
+  background: var(--bg-content);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+}
+
+.whois-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.whois-value {
+  font-size: 14px;
+  color: var(--text-primary);
+  font-weight: 500;
+  word-break: break-all;
+}
+
+.whois-value.whois-domain {
+  font-family: "SF Mono", Monaco, monospace;
+  color: var(--accent);
+  font-size: 16px;
+}
+
+.whois-details {
+  background: var(--bg-content);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 20px;
+}
+
+.whois-section {
+  margin-bottom: 24px;
+}
+
+.whois-section:last-child {
+  margin-bottom: 0;
+}
+
+.whois-section h3 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0 0 12px 0;
+}
+
+.whois-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.whois-tag {
+  display: inline-block;
+  padding: 4px 10px;
+  background: rgba(0, 122, 255, 0.1);
+  color: var(--accent);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-family: "SF Mono", Monaco, monospace;
+  font-weight: 500;
+}
+
+.whois-empty {
+  color: var(--text-tertiary);
+  font-size: 13px;
+  font-style: italic;
+}
+
+.whois-nameservers {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.whois-nameserver-item {
+  padding: 8px 12px;
+  background: var(--bg-hover);
+  border-radius: var(--radius-sm);
+  font-family: "SF Mono", Monaco, monospace;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.whois-raw {
+  background: var(--command-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  font-family: "SF Mono", Monaco, monospace;
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 300px;
+  overflow-y: auto;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* ===== SSL 证书检查 ===== */
+.ssl-container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.ssl-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.ssl-header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.ssl-search {
+  display: flex;
+  gap: 8px;
+}
+
+.ssl-search input {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 13px;
+  min-width: 200px;
+}
+
+.ssl-results {
+  animation: fadeIn 0.3s ease;
+}
+
+.ssl-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.ssl-summary-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  position: relative;
+}
+
+.ssl-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-tertiary);
+  margin-bottom: 6px;
+}
+
+.ssl-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.ssl-host {
+  font-family: "SF Mono", Monaco, monospace;
+  font-size: 14px;
+}
+
+.ssl-details {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.ssl-section {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+}
+
+.ssl-section h3 {
+  margin: 0 0 16px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ssl-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.ssl-info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ssl-info-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.ssl-info-value {
+  font-size: 13px;
+  color: var(--text-primary);
+  font-family: "SF Mono", Monaco, monospace;
+  word-break: break-all;
+}
+
+.ssl-serial {
+  font-size: 11px;
+}
+
+/* 证书状态 */
+.cert-status {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.cert-status.valid {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--green);
+}
+
+.cert-status.warning {
+  background: rgba(255, 170, 0, 0.15);
+  color: var(--orange);
+}
+
+.cert-status.expired {
+  background: rgba(255, 59, 48, 0.15);
+  color: var(--red);
+}
+
+.cert-days {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.cert-days.valid {
+  color: var(--green);
+}
+
+.cert-days.warning {
+  color: var(--orange);
+}
+
+.cert-days.expired {
+  color: var(--red);
+}
+
+/* 证书链 */
+.cert-chain {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cert-chain-item {
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  position: relative;
+}
+
+.cert-chain-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+
+.cert-chain-detail {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-family: "SF Mono", Monaco, monospace;
+  margin-bottom: 4px;
+}
+
+.cert-tag {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  font-weight: 500;
+  margin-top: 8px;
+}
+
+.cert-tag.self-signed {
+  background: rgba(255, 170, 0, 0.15);
+  color: var(--orange);
+}
+
+/* ===== DNS 查询页面 ===== */
+.dns-container {
+  padding: 20px;
+  height: 100%;
+  overflow-y: auto;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.dns-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.dns-header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.dns-search {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dns-search input {
+  flex: 1;
+  min-width: 200px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-content);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: "SF Mono", Monaco, monospace;
+  transition: all 0.2s ease;
+}
+
+.dns-search input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.15);
+}
+
+.dns-search input::placeholder {
+  color: var(--text-tertiary);
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+
+.dns-search select {
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-content);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.dns-results {
+  animation: fadeIn 0.3s ease;
+}
+
+.dns-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.dns-summary-card {
+  background: var(--bg-content);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+}
+
+.dns-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-tertiary);
+  margin-bottom: 8px;
+}
+
+.dns-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.dns-value.dns-domain {
+  font-family: "SF Mono", Monaco, monospace;
+  font-size: 14px;
+}
+
+.dns-time-value {
+  color: var(--green);
+}
+
+.dns-records-section {
+  background: var(--bg-content);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 20px;
+}
+
+.dns-records-section h3 {
+  margin: 0 0 16px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.dns-records-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dns-record-item {
+  display: grid;
+  grid-template-columns: 2fr 80px 100px 3fr;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg-hover);
+  border-radius: var(--radius-sm);
+  align-items: center;
+  font-size: 13px;
+}
+
+.dns-record-name {
+  font-family: "SF Mono", Monaco, monospace;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dns-record-type {
+  padding: 2px 8px;
+  background: rgba(0, 122, 255, 0.1);
+  color: var(--accent);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.dns-record-ttl {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.dns-record-data {
+  font-family: "SF Mono", Monaco, monospace;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 768px) {
+  .dns-record-item {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
 }

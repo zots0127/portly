@@ -1,8 +1,8 @@
 //! Export module for Portly
 //! Provides data export functionality in multiple formats (CSV, JSON)
 
-use serde::{Deserialize, Serialize};
 use chrono::Local;
+use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
@@ -39,10 +39,10 @@ pub struct ScanHistoryEntry {
 /// Export port data to CSV format
 pub fn export_to_csv(ports: &[PortInfo], path: &str) -> ExportResult {
     let mut csv_content = String::new();
-    
+
     // Header
     csv_content.push_str("Port,Protocol,Address,PID,Process,User,Command\n");
-    
+
     // Data rows
     for port in ports {
         let command = port.command.as_deref().unwrap_or("");
@@ -52,7 +52,7 @@ pub fn export_to_csv(ports: &[PortInfo], path: &str) -> ExportResult {
         } else {
             command.to_string()
         };
-        
+
         csv_content.push_str(&format!(
             "{},{},{},{},{},{},{}\n",
             port.port,
@@ -64,7 +64,7 @@ pub fn export_to_csv(ports: &[PortInfo], path: &str) -> ExportResult {
             escaped_command
         ));
     }
-    
+
     match write_file(path, &csv_content) {
         Ok(_) => ExportResult {
             success: true,
@@ -89,24 +89,22 @@ pub fn export_to_json(scan_result: &ScanResult, path: &str) -> ExportResult {
         "total_ports": scan_result.total_ports,
         "ports": scan_result.ports,
     });
-    
+
     match serde_json::to_string_pretty(&export_data) {
-        Ok(json_str) => {
-            match write_file(path, &json_str) {
-                Ok(_) => ExportResult {
-                    success: true,
-                    path: Some(path.to_string()),
-                    message: format!("成功导出 {} 条记录到 JSON", scan_result.total_ports),
-                    record_count: scan_result.total_ports,
-                },
-                Err(e) => ExportResult {
-                    success: false,
-                    path: None,
-                    message: format!("JSON 写入失败: {}", e),
-                    record_count: 0,
-                },
-            }
-        }
+        Ok(json_str) => match write_file(path, &json_str) {
+            Ok(_) => ExportResult {
+                success: true,
+                path: Some(path.to_string()),
+                message: format!("成功导出 {} 条记录到 JSON", scan_result.total_ports),
+                record_count: scan_result.total_ports,
+            },
+            Err(e) => ExportResult {
+                success: false,
+                path: None,
+                message: format!("JSON 写入失败: {}", e),
+                record_count: 0,
+            },
+        },
         Err(e) => ExportResult {
             success: false,
             path: None,
@@ -119,7 +117,7 @@ pub fn export_to_json(scan_result: &ScanResult, path: &str) -> ExportResult {
 /// Export port data to plain text format (human-readable)
 pub fn export_to_txt(ports: &[PortInfo], path: &str) -> ExportResult {
     let mut txt_content = String::new();
-    
+
     // Header with timestamp
     txt_content.push_str(&format!(
         "Portly 端口扫描报告\n导出时间: {}\n",
@@ -129,15 +127,12 @@ pub fn export_to_txt(ports: &[PortInfo], path: &str) -> ExportResult {
     txt_content.push_str("=".repeat(80).as_str());
     txt_content.push('\n');
     txt_content.push('\n');
-    
+
     // Port entries
     for port in ports {
         txt_content.push_str(&format!(
             "端口: {:<6} | {} | {} | PID: {}\n",
-            port.port,
-            port.protocol,
-            port.process,
-            port.pid
+            port.port, port.protocol, port.process, port.pid
         ));
         txt_content.push_str(&format!("  地址: {} | 用户: {}\n", port.address, port.user));
         if let Some(cmd) = &port.command {
@@ -145,7 +140,7 @@ pub fn export_to_txt(ports: &[PortInfo], path: &str) -> ExportResult {
         }
         txt_content.push('\n');
     }
-    
+
     match write_file(path, &txt_content) {
         Ok(_) => ExportResult {
             success: true,
@@ -189,12 +184,16 @@ fn write_file(path: &str, content: &str) -> std::io::Result<()> {
 }
 
 /// Export ports with auto-generated filename
-pub fn export_auto(ports: &[PortInfo], scan_result: &ScanResult, format: ExportFormat) -> ExportResult {
+pub fn export_auto(
+    ports: &[PortInfo],
+    scan_result: &ScanResult,
+    format: ExportFormat,
+) -> ExportResult {
     let dir = get_default_export_dir();
     let filename = generate_export_filename(&format);
     let full_path = dir.join(&filename);
     let path_str = full_path.to_string_lossy().to_string();
-    
+
     match format {
         ExportFormat::Csv => export_to_csv(ports, &path_str),
         ExportFormat::Json => export_to_json(scan_result, &path_str),
@@ -218,11 +217,9 @@ pub fn load_scan_history() -> Vec<ScanHistoryEntry> {
     if !path.exists() {
         return Vec::new();
     }
-    
+
     match std::fs::read_to_string(&path) {
-        Ok(content) => {
-            serde_json::from_str(&content).unwrap_or_default()
-        }
+        Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
         Err(_) => Vec::new(),
     }
 }
@@ -230,16 +227,15 @@ pub fn load_scan_history() -> Vec<ScanHistoryEntry> {
 /// Save a scan to history
 pub fn save_to_history(scan_result: &ScanResult) -> Result<(), String> {
     let path = get_history_path();
-    
+
     // Ensure directory exists
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("创建历史目录失败: {}", e))?;
+        std::fs::create_dir_all(parent).map_err(|e| format!("创建历史目录失败: {}", e))?;
     }
-    
+
     // Load existing history
     let mut history = load_scan_history();
-    
+
     // Add new entry
     let entry = ScanHistoryEntry {
         timestamp: Local::now().to_rfc3339(),
@@ -247,21 +243,20 @@ pub fn save_to_history(scan_result: &ScanResult) -> Result<(), String> {
         scan_duration_ms: 0, // Duration not tracked in current ScanResult
         ports: scan_result.ports.clone(),
     };
-    
+
     history.push(entry);
-    
+
     // Keep only last 100 entries
     if history.len() > 100 {
         history = history.split_off(history.len() - 100);
     }
-    
+
     // Save to file
-    let json = serde_json::to_string_pretty(&history)
-        .map_err(|e| format!("序列化历史数据失败: {}", e))?;
-    
-    std::fs::write(&path, json)
-        .map_err(|e| format!("写入历史文件失败: {}", e))?;
-    
+    let json =
+        serde_json::to_string_pretty(&history).map_err(|e| format!("序列化历史数据失败: {}", e))?;
+
+    std::fs::write(&path, json).map_err(|e| format!("写入历史文件失败: {}", e))?;
+
     Ok(())
 }
 
@@ -282,4 +277,200 @@ pub fn get_history_summary() -> Vec<HistorySummary> {
             scan_duration_ms: entry.scan_duration_ms,
         })
         .collect()
+}
+
+// ===== Unit Tests =====
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn test_export_format_enum() {
+        // 测试导出格式枚举
+        assert!(matches!(ExportFormat::Csv, ExportFormat::Csv));
+        assert!(matches!(ExportFormat::Json, ExportFormat::Json));
+        assert!(matches!(ExportFormat::Txt, ExportFormat::Txt));
+    }
+
+    #[test]
+    fn test_export_result_serialization() {
+        let result = ExportResult {
+            success: true,
+            path: Some("/test/path.csv".to_string()),
+            message: "Export successful".to_string(),
+            record_count: 10,
+        };
+
+        let serialized = serde_json::to_string(&result).unwrap();
+        let deserialized: ExportResult = serde_json::from_str(&serialized).unwrap();
+        assert!(deserialized.success);
+        assert_eq!(deserialized.record_count, 10);
+    }
+
+    #[test]
+    fn test_history_summary_serialization() {
+        let summary = HistorySummary {
+            timestamp: "2024-01-01T00:00:00Z".to_string(),
+            port_count: 100,
+            scan_duration_ms: 500,
+        };
+
+        let serialized = serde_json::to_string(&summary).unwrap();
+        let deserialized: HistorySummary = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(deserialized.port_count, 100);
+    }
+
+    #[test]
+    fn test_export_to_csv_creates_valid_format() {
+        let ports = vec![PortInfo {
+            port: 8080,
+            protocol: "tcp".to_string(),
+            address: "127.0.0.1".to_string(),
+            pid: "1234".to_string(),
+            process: "node".to_string(),
+            user: "user".to_string(),
+            command: Some("node app".to_string()),
+        }];
+
+        let temp_dir = std::env::temp_dir();
+        let test_path = temp_dir.join("test_export.csv");
+
+        let result = export_to_csv(&ports, test_path.to_str().unwrap());
+
+        assert!(result.success);
+        assert!(fs::metadata(&test_path).is_ok());
+
+        // 验证文件内容
+        let content = fs::read_to_string(&test_path).unwrap();
+        assert!(content.contains("8080"));
+        assert!(content.contains("node"));
+
+        // 清理
+        let _ = fs::remove_file(&test_path);
+    }
+
+    #[test]
+    fn test_export_to_json_creates_valid_format() {
+        let ports = vec![];
+        let scan_result = ScanResult {
+            scan_time: "2024-01-01".to_string(),
+            total_ports: 0,
+            unique_apps: 0,
+            ports: ports.clone(),
+        };
+
+        let temp_dir = std::env::temp_dir();
+        let test_path = temp_dir.join("test_export.json");
+
+        let result = export_to_json(&scan_result, test_path.to_str().unwrap());
+
+        assert!(result.success);
+        assert!(fs::metadata(&test_path).is_ok());
+
+        // 验证是有效 JSON
+        let content = fs::read_to_string(&test_path).unwrap();
+        assert!(serde_json::from_str::<serde_json::Value>(&content).is_ok());
+
+        // 清理
+        let _ = fs::remove_file(&test_path);
+    }
+
+    #[test]
+    fn test_get_default_export_dir() {
+        let dir = get_default_export_dir();
+        assert!(!dir.as_os_str().is_empty());
+        // 验证路径存在或可以创建
+        assert!(dir.is_absolute());
+    }
+
+    #[test]
+    fn test_export_to_txt_creates_valid_format() {
+        let ports = vec![PortInfo {
+            port: 3000,
+            protocol: "tcp".to_string(),
+            address: "0.0.0.0".to_string(),
+            pid: "5678".to_string(),
+            process: "nginx".to_string(),
+            user: "root".to_string(),
+            command: Some("nginx: master process".to_string()),
+        }];
+
+        let temp_dir = std::env::temp_dir();
+        let test_path = temp_dir.join("test_export.txt");
+
+        let result = export_to_txt(&ports, test_path.to_str().unwrap());
+
+        assert!(result.success);
+        assert!(fs::metadata(&test_path).is_ok());
+
+        // 验证文件内容
+        let content = fs::read_to_string(&test_path).unwrap();
+        assert!(content.contains("3000"));
+        assert!(content.contains("nginx"));
+        assert!(content.contains("Portly"));
+
+        // 清理
+        let _ = fs::remove_file(&test_path);
+    }
+
+    #[test]
+    fn test_generate_export_filename() {
+        let csv_filename = generate_export_filename(&ExportFormat::Csv);
+        assert!(csv_filename.ends_with(".csv"));
+        assert!(csv_filename.contains("portly_export_"));
+
+        let json_filename = generate_export_filename(&ExportFormat::Json);
+        assert!(json_filename.ends_with(".json"));
+
+        let txt_filename = generate_export_filename(&ExportFormat::Txt);
+        assert!(txt_filename.ends_with(".txt"));
+    }
+
+    #[test]
+    fn test_csv_with_special_characters() {
+        let ports = vec![PortInfo {
+            port: 8080,
+            protocol: "tcp".to_string(),
+            address: "127.0.0.1".to_string(),
+            pid: "1234".to_string(),
+            process: "test".to_string(),
+            user: "user".to_string(),
+            command: Some("node app,with,commas".to_string()),
+        }];
+
+        let temp_dir = std::env::temp_dir();
+        let test_path = temp_dir.join("test_export_special.csv");
+
+        let result = export_to_csv(&ports, test_path.to_str().unwrap());
+
+        assert!(result.success);
+        let content = fs::read_to_string(&test_path).unwrap();
+        // 验证命令中的逗号被正确转义
+        assert!(content.contains("\"node app,with,commas\""));
+
+        // 清理
+        let _ = fs::remove_file(&test_path);
+    }
+
+    #[test]
+    fn test_export_empty_ports() {
+        let ports = vec![];
+
+        let temp_dir = std::env::temp_dir();
+        let test_path = temp_dir.join("test_export_empty.csv");
+
+        let result = export_to_csv(&ports, test_path.to_str().unwrap());
+
+        assert!(result.success);
+        assert_eq!(result.record_count, 0);
+
+        // 验证文件仍包含表头
+        let content = fs::read_to_string(&test_path).unwrap();
+        assert!(content.contains("Port,Protocol"));
+
+        // 清理
+        let _ = fs::remove_file(&test_path);
+    }
 }

@@ -1,5 +1,32 @@
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { toCommandErrorMessage, formatCommandErrorMessage } from "./error-utils";
+import { showToast } from "./ui-feedback";
+import {
+  buildSubnetScanEstimateMessage,
+  estimateScanDurationSeconds,
+  getSubnetInput,
+  isValidSubnetRange,
+} from "./network-utils";
+import {
+  buildDiscoverDevicesLoadingHtml,
+  buildMonitorLoadingHtml,
+  DEFAULT_MONITOR_STARTUP_TIMEOUT_MESSAGE,
+  applyMonitorTimeoutFallback,
+  setMonitorErrorState,
+  setDiscoverDevicesIdleState,
+  setDiscoverDevicesLoadingState,
+  setDiscoverDevicesErrorState,
+  setMonitorStartState,
+  setMonitorStopState,
+  startMonitorLoadingTimer,
+  stopMonitorLoadingTimer,
+  startMonitorStartupTimeout,
+  stopMonitorStartupTimeout,
+  setPortScanIdleState,
+  setPortScanLoadingState,
+  setPortScanErrorState,
+} from "./scan-ui-state";
 
 // ===== 类型定义 =====
 interface PortInfo {
@@ -88,12 +115,79 @@ interface HistorySummary {
   scan_duration_ms: number;
 }
 
+// ===== DNS 查询类型 =====
+interface DnsRecord {
+  name: string;
+  rtype: string;
+  ttl: number;
+  data: string;
+}
+
+interface DnsQueryResult {
+  domain: string;
+  record_type: string;
+  records: DnsRecord[];
+  query_time_ms: number;
+  dns_server: string;
+  error: string | null;
+}
+
+// ===== Whois 类型 =====
+interface WhoisResult {
+  domain: string;
+  registrar: string | null;
+  created: string | null;
+  expires: string | null;
+  updated: string | null;
+  status: string[];
+  nameservers: string[];
+  dnssec: string | null;
+  raw_output: string;
+  error: string | null;
+}
+
+// ===== SSL 证书类型 =====
+interface CertChainItem {
+  subject: string;
+  issuer: string;
+  is_self_signed: boolean;
+}
+
+interface SslCertInfo {
+  host: string;
+  port: number;
+  subject: string;
+  issuer: string;
+  valid_from: string;
+  valid_until: string;
+  is_valid: boolean;
+  is_expired: boolean;
+  is_self_signed: boolean;
+  days_until_expiry: number;
+  signature_algorithm: string;
+  version: string;
+  serial_number: string;
+  key_size: number | null;
+  certificate_chain: CertChainItem[];
+  tls_version: string;
+  cipher_suite: string | null;
+  error: string | null;
+}
+
 // ===== DOM 元素 =====
 // Tab 切换
 const tabLocal = document.getElementById("tab-local") as HTMLButtonElement;
 const tabNetwork = document.getElementById("tab-network") as HTMLButtonElement;
+const tabMonitor = document.getElementById("tab-monitor") as HTMLButtonElement;
+const tabDns = document.getElementById("tab-dns") as HTMLButtonElement;
+const tabWhois = document.getElementById("tab-whois") as HTMLButtonElement;
+const tabSsl = document.getElementById("tab-ssl") as HTMLButtonElement;
 const pageLocal = document.getElementById("page-local") as HTMLDivElement;
 const pageNetwork = document.getElementById("page-network") as HTMLDivElement;
+const pageMonitor = document.getElementById("page-monitor") as HTMLDivElement;
+const pageDns = document.getElementById("page-dns") as HTMLDivElement;
+const pageWhois = document.getElementById("page-whois") as HTMLDivElement;
+const pageSsl = document.getElementById("page-ssl") as HTMLDivElement;
 
 // 本地端口页面
 const viewTableBtn = document.getElementById("view-table") as HTMLButtonElement;
@@ -112,6 +206,7 @@ const groupView = document.getElementById("group-view") as HTMLDivElement;
 
 // 网络扫描页面
 const subnetSelect = document.getElementById("subnet-select") as HTMLSelectElement;
+const manualSubnetInput = document.getElementById("manual-subnet") as HTMLInputElement;
 const scanDevicesBtn = document.getElementById("scan-devices-btn") as HTMLButtonElement;
 const refreshNetworkBtn = document.getElementById("refresh-network-btn") as HTMLButtonElement;
 const netStatDevices = document.getElementById("net-stat-devices") as HTMLSpanElement;
@@ -126,7 +221,7 @@ const portResults = document.getElementById("port-results") as HTMLDivElement;
 
 // ===== 状态 =====
 let currentView: "table" | "group" = "table";
-let currentPage: "local" | "network" | "monitor" = "local";
+let currentPage: "local" | "network" | "monitor" | "dns" | "whois" | "ssl" = "local";
 let isLoading = false;
 let selectedDevice: NetworkDevice | null = null;
 let discoveredDevices: NetworkDevice[] = [];
@@ -145,21 +240,24 @@ sourceFilterBtns.forEach((btn) => {
 });
 
 // ===== Tab 切换 =====
-const tabMonitor = document.getElementById("tab-monitor") as HTMLButtonElement;
-const pageMonitor = document.getElementById("page-monitor") as HTMLDivElement;
-
-function switchPage(page: "local" | "network" | "monitor") {
+function switchPage(page: "local" | "network" | "monitor" | "dns" | "whois" | "ssl") {
   currentPage = page;
 
   // 清除所有 Tab 的 active 状态
   tabLocal.classList.remove("active");
   tabNetwork.classList.remove("active");
   tabMonitor?.classList.remove("active");
+  tabDns?.classList.remove("active");
+  tabWhois?.classList.remove("active");
+  tabSsl?.classList.remove("active");
 
   // 隐藏所有页面
   pageLocal.classList.add("hidden");
   pageNetwork.classList.add("hidden");
   pageMonitor?.classList.add("hidden");
+  pageDns?.classList.add("hidden");
+  pageWhois?.classList.add("hidden");
+  pageSsl?.classList.add("hidden");
 
   // 激活当前 Tab 和页面
   if (page === "local") {
@@ -174,12 +272,24 @@ function switchPage(page: "local" | "network" | "monitor") {
     tabMonitor?.classList.add("active");
     pageMonitor?.classList.remove("hidden");
     initMonitorPage();
+  } else if (page === "dns") {
+    tabDns?.classList.add("active");
+    pageDns?.classList.remove("hidden");
+  } else if (page === "whois") {
+    tabWhois?.classList.add("active");
+    pageWhois?.classList.remove("hidden");
+  } else if (page === "ssl") {
+    tabSsl?.classList.add("active");
+    pageSsl?.classList.remove("hidden");
   }
 }
 
 tabLocal.addEventListener("click", () => switchPage("local"));
 tabNetwork.addEventListener("click", () => switchPage("network"));
 tabMonitor?.addEventListener("click", () => switchPage("monitor"));
+tabDns?.addEventListener("click", () => switchPage("dns"));
+tabWhois?.addEventListener("click", () => switchPage("whois"));
+tabSsl?.addEventListener("click", () => switchPage("ssl"));
 
 // ===== 本地端口扫描 =====
 async function scanPorts() {
@@ -250,7 +360,7 @@ async function scanPorts() {
     }
 
   } catch (error) {
-    console.error("Scan failed:", error);
+    reportCommandError("扫描本地端口", error);
   } finally {
     isLoading = false;
     refreshBtn.classList.remove("spinning");
@@ -352,7 +462,7 @@ function renderTable(ports: PortInfo[], showCmd: boolean, dockerPorts?: Map<numb
         try {
           await openUrl(url);
         } catch (error) {
-          console.error("Failed to open URL:", error);
+        reportCommandError("打开端口链接", error);
           window.open(url, "_blank");
         }
       });
@@ -387,8 +497,7 @@ function renderTable(ports: PortInfo[], showCmd: boolean, dockerPorts?: Map<numb
           showToast(`❌ ${result.message}`, "error");
         }
       } catch (error) {
-        console.error("Kill process failed:", error);
-        showToast(`❌ 终止进程失败: ${error}`, "error");
+        reportCommandError("终止进程", error);
       }
     };
     console.log("Kill button created for PID:", p.pid);
@@ -436,7 +545,7 @@ function initTableClickHandler() {
       try {
         await openUrl(url);
       } catch (error) {
-        console.error("Failed to open URL:", error);
+        reportCommandError("打开端口链接", error);
         window.open(url, "_blank");
       }
       return;
@@ -472,8 +581,7 @@ function initTableClickHandler() {
           showToast(`❌ ${result.message}`, "error");
         }
       } catch (error) {
-        console.error("Kill process failed:", error);
-        showToast(`❌ 终止进程失败: ${error}`, "error");
+        reportCommandError("终止进程", error);
       }
     }
   });
@@ -515,7 +623,7 @@ async function scanGrouped() {
     renderGroups(filtered);
 
   } catch (error) {
-    console.error("Group failed:", error);
+    reportCommandError("扫描应用分组", error);
   } finally {
     isLoading = false;
     refreshBtn.classList.remove("spinning");
@@ -559,45 +667,56 @@ function truncate(str: string, maxLen: number): string {
   return str.length > maxLen ? str.substring(0, maxLen) + "…" : str;
 }
 
-// ===== Toast 通知 =====
-function showToast(message: string, type: "success" | "error" | "info" = "info") {
-  // 创建或获取 toast 容器
-  let container = document.getElementById("toast-container");
-  if (!container) {
-    container = document.createElement("div");
-    container.id = "toast-container";
-    container.style.cssText = `
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      z-index: 10000;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    `;
-    document.body.appendChild(container);
+function isValidHost(input: string): boolean {
+  const value = input.trim().toLowerCase();
+  if (!value) return false;
+
+  if (value === "localhost") return true;
+
+  // IPv4 校验
+  const ipPattern = /^(\d{1,3}\.){3}\d{1,3}$/;
+  if (ipPattern.test(value)) {
+    return value.split('.').every((part) => {
+      const n = Number(part);
+      return Number.isInteger(n) && n >= 0 && n <= 255;
+    });
   }
 
-  const toast = document.createElement("div");
-  toast.className = `toast toast-${type}`;
-  toast.style.cssText = `
-    padding: 12px 20px;
-    border-radius: 8px;
-    color: white;
-    font-size: 13px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    animation: slideIn 0.3s ease;
-    max-width: 400px;
-    background: ${type === "success" ? "#22c55e" : type === "error" ? "#ef4444" : "#3b82f6"};
-  `;
-  toast.textContent = message;
-  container.appendChild(toast);
+  if (!/^[a-z0-9.-]+$/.test(value)) return false;
+  if (value.startsWith('-') || value.endsWith('-') || value.startsWith('.') || value.endsWith('.')) return false;
+  if (value.includes('..')) return false;
 
-  // 3秒后移除
-  setTimeout(() => {
-    toast.style.animation = "slideOut 0.3s ease";
-    setTimeout(() => toast.remove(), 300);
-  }, 3000);
+  const labels = value.split('.');
+  if (labels.length < 1) return false;
+  return labels.every((label) => {
+    if (!label || label.length > 63) return false;
+    if (label.startsWith('-') || label.endsWith('-')) return false;
+    return true;
+  });
+}
+
+function parsePort(input: string): number | null {
+  const value = input.trim();
+  if (!/^\d+$/.test(value)) return null;
+
+  const num = Number.parseInt(value, 10);
+  if (!Number.isInteger(num) || num < 1 || num > 65535) return null;
+  return num;
+}
+
+function parsePortRange(startInput: string, endInput: string, defaultStart = 1, defaultEnd = 1000): { start: number; end: number } | null {
+  const start = startInput.trim() ? parsePort(startInput) : defaultStart;
+  const end = endInput.trim() ? parsePort(endInput) : defaultEnd;
+
+  if (start === null || end === null) return null;
+  if (start > end) return null;
+  return { start, end };
+}
+
+function reportCommandError(action: string, error: unknown): void {
+  const formatted = formatCommandErrorMessage(action, error);
+  console.error(`${action} 失败:`, error);
+  showToast(formatted, "error");
 }
 
 // ===== 导出功能 =====
@@ -623,8 +742,7 @@ async function exportData(format: "csv" | "json" | "txt") {
       showToast(`❌ ${result.message}`, "error");
     }
   } catch (error) {
-    console.error("Export failed:", error);
-    showToast(`❌ 导出失败: ${error}`, "error");
+    reportCommandError("导出数据", error);
   }
 }
 
@@ -679,6 +797,7 @@ function switchView(view: "table" | "group") {
 // ===== 网络扫描 =====
 async function loadInterfaces() {
   try {
+    manualSubnetInput.value = "";
     const interfaces: NetworkInterface[] = await invoke("tauri_get_interfaces");
     const currentSubnet: string | null = await invoke("tauri_get_current_subnet");
 
@@ -694,17 +813,41 @@ async function loadInterfaces() {
       subnetSelect.appendChild(option);
     }
   } catch (error) {
-    console.error("Failed to load interfaces:", error);
+    reportCommandError("加载网络接口", error);
   }
 }
 
 async function discoverDevices() {
-  const subnet = subnetSelect.value;
+  const subnet = getSubnetInput(subnetSelect.value, manualSubnetInput.value, "");
   if (!subnet) return;
 
-  scanDevicesBtn.disabled = true;
-  scanDevicesBtn.textContent = "⏳ 扫描中...";
-  deviceList.innerHTML = `<div class="loading">正在扫描局域网设备...</div>`;
+  if (!isValidSubnetRange(subnet)) {
+    showToast("⚠️ 子网格式应为 IPv4 CIDR，当前支持 /22~24（如 192.168.1.0/24）", "warning");
+    return;
+  }
+
+  const rangeEstimateMessage = buildSubnetScanEstimateMessage(subnet);
+  if (rangeEstimateMessage) {
+    showToast(`⚠️ ${rangeEstimateMessage}`, "warning");
+  }
+  const estimateSeconds = estimateScanDurationSeconds(subnet);
+  const scanStartAt = Date.now();
+  const loadingBase = "正在扫描局域网设备...";
+  let loadingTimer: number | null = null;
+
+  const buildLoadingHtml = () =>
+    buildDiscoverDevicesLoadingHtml(
+      loadingBase,
+      scanStartAt,
+      estimateSeconds,
+      rangeEstimateMessage,
+    );
+  setDiscoverDevicesLoadingState(scanDevicesBtn, deviceList, buildLoadingHtml());
+  if (rangeEstimateMessage || estimateSeconds) {
+    loadingTimer = window.setInterval(() => {
+      deviceList.innerHTML = buildLoadingHtml();
+    }, 1000);
+  }
 
   try {
     discoveredDevices = await invoke("tauri_discover_devices", { subnet });
@@ -714,11 +857,14 @@ async function discoverDevices() {
 
     renderDeviceList();
   } catch (error) {
-    console.error("Device discovery failed:", error);
-    deviceList.innerHTML = `<div class="empty-state"><div class="icon">❌</div><div>扫描失败</div></div>`;
+    reportCommandError("扫描局域网设备", error);
+    setDiscoverDevicesErrorState(deviceList);
   } finally {
-    scanDevicesBtn.disabled = false;
-    scanDevicesBtn.textContent = "🔍 扫描设备";
+    if (loadingTimer) {
+      window.clearInterval(loadingTimer);
+      loadingTimer = null;
+    }
+    setDiscoverDevicesIdleState(scanDevicesBtn);
   }
 }
 
@@ -787,10 +933,12 @@ function selectDevice(device: NetworkDevice) {
 
 async function scanRemotePorts() {
   if (!selectedDevice) return;
+  if (!isValidHost(selectedDevice.ip)) {
+    showToast("⚠️ 选中的设备地址不合法", "warning");
+    return;
+  }
 
-  scanPortsBtn.disabled = true;
-  scanPortsBtn.textContent = "⏳ 扫描中...";
-  portResults.innerHTML = `<div class="loading">正在扫描 ${selectedDevice.ip} 的端口...</div>`;
+  setPortScanLoadingState(scanPortsBtn, portResults, selectedDevice.ip);
 
   try {
     let ports: RemotePort[];
@@ -813,8 +961,12 @@ async function scanRemotePorts() {
         timeoutMs: 200
       });
     } else {
-      const start = parseInt(portStart.value) || 1;
-      const end = parseInt(portEnd.value) || 1000;
+      const range = parsePortRange(portStart.value, portEnd.value, 1, 1000);
+      if (!range) {
+        showToast("⚠️ 请输入合法端口范围（1-65535，起始 ≤ 结束）", "warning");
+        return;
+      }
+      const { start, end } = range;
       ports = await invoke("tauri_scan_ports_range", {
         ip: selectedDevice.ip,
         start,
@@ -825,11 +977,10 @@ async function scanRemotePorts() {
 
     renderPortResults(ports);
   } catch (error) {
-    console.error("Port scan failed:", error);
-    portResults.innerHTML = `<div class="empty-state"><div class="icon">❌</div><div>扫描失败</div></div>`;
+    reportCommandError("远程端口扫描", error);
+    setPortScanErrorState(portResults);
   } finally {
-    scanPortsBtn.disabled = false;
-    scanPortsBtn.textContent = "扫描端口";
+    setPortScanIdleState(scanPortsBtn);
   }
 }
 
@@ -888,7 +1039,11 @@ interface ResolveResult {
 addManualTargetBtn?.addEventListener("click", async () => {
   const target = manualTargetInput?.value?.trim();
   if (!target) {
-    alert("请输入 IP 地址或域名");
+    showToast("⚠️ 请输入 IP 地址或域名", "warning");
+    return;
+  }
+  if (!isValidHost(target)) {
+    showToast("⚠️ 请输入有效的 IP 或域名", "warning");
     return;
   }
 
@@ -921,7 +1076,7 @@ addManualTargetBtn?.addEventListener("click", async () => {
       console.log(`域名 ${result.original} 解析为 ${result.ip}`);
     }
   } catch (error) {
-    alert("解析失败: " + error);
+    reportCommandError("解析目标", error);
   }
 });
 
@@ -1000,6 +1155,10 @@ interface PingOneResult {
 
 async function runPing() {
   if (!selectedDevice) return;
+  if (!isValidHost(selectedDevice.ip)) {
+    showToast("⚠️ 选中的设备地址不合法", "warning");
+    return;
+  }
 
   // 如果正在监测，则停止
   if (pingMonitorInterval) {
@@ -1101,7 +1260,7 @@ async function runPing() {
         document.getElementById("stop-ping-btn")?.addEventListener("click", stopPingMonitor);
       }
     } catch (error) {
-      console.error("Ping error:", error);
+      reportCommandError("Ping", error);
     }
   };
 
@@ -1148,6 +1307,10 @@ function renderPingChart(container: HTMLElement, history: { time: number; ms: nu
 
 async function runTraceroute() {
   if (!selectedDevice) return;
+  if (!isValidHost(selectedDevice.ip)) {
+    showToast("⚠️ 选中的设备地址不合法", "warning");
+    return;
+  }
 
   traceBtn.disabled = true;
   traceBtn.textContent = "⏳ 追踪中...";
@@ -1174,7 +1337,7 @@ async function runTraceroute() {
       <div class="trace-results">${escapeHtml(result.raw_output)}</div>
     `;
   } catch (error) {
-    console.error("Traceroute failed:", error);
+    reportCommandError("Traceroute", error);
     portResults.innerHTML = `<div class="empty-state"><div class="icon">❌</div><div>Traceroute 失败</div></div>`;
   } finally {
     traceBtn.disabled = false;
@@ -1218,6 +1381,7 @@ async function runMultiPing() {
   // 初始化所有设备的数据
   multiPingDevices.clear();
   for (const device of discoveredDevices) {
+    if (!isValidHost(device.ip)) continue;
     multiPingDevices.set(device.ip, {
       ip: device.ip,
       history: [],
@@ -1225,6 +1389,10 @@ async function runMultiPing() {
       sent: 0,
       received: 0,
     });
+  }
+  if (multiPingDevices.size === 0) {
+    showToast("⚠️ 当前列表中未找到可用 IP", "warning");
+    return;
   }
 
   multiPingBtn.textContent = "⏹ 停止监测";
@@ -1382,6 +1550,7 @@ multiPingBtn?.addEventListener("click", runMultiPing);
 const monitorSubnet = document.getElementById("monitor-subnet") as HTMLSelectElement;
 const startMonitorBtn = document.getElementById("start-monitor-btn") as HTMLButtonElement;
 const stopMonitorBtn = document.getElementById("stop-monitor-btn") as HTMLButtonElement;
+const monitorManualSubnetInput = document.getElementById("monitor-manual-subnet") as HTMLInputElement;
 const monitorCanvas = document.getElementById("monitor-canvas") as HTMLCanvasElement;
 const deviceGrid = document.getElementById("device-grid") as HTMLDivElement;
 
@@ -1394,11 +1563,15 @@ interface MonitorDevice {
 }
 
 let monitorInterval: number | null = null;
+let monitorLoadingInterval: number | null = null;
+let monitorStartupTimeout: number | null = null;
+let monitorSessionId = 0;
 let monitorDevices: Map<string, MonitorDevice> = new Map();
 
 async function initMonitorPage() {
   // 加载网络接口
   try {
+    monitorManualSubnetInput.value = "";
     const interfaces: NetworkInterface[] = await invoke("tauri_get_interfaces");
     monitorSubnet.innerHTML = '<option value="">选择网段...</option>';
     interfaces.forEach((iface) => {
@@ -1411,7 +1584,7 @@ async function initMonitorPage() {
       }
     });
   } catch (error) {
-    console.error("Failed to load interfaces:", error);
+    reportCommandError("加载监测网段", error);
   }
 
   // 初始渲染 canvas（显示提示信息）
@@ -1419,19 +1592,63 @@ async function initMonitorPage() {
 }
 
 async function startMonitor() {
-  const subnet = monitorSubnet.value;
+  const subnet = getSubnetInput(monitorSubnet.value, monitorManualSubnetInput.value, "");
   if (!subnet) {
-    alert("请选择网段");
+    showToast("⚠️ 请选择网段", "warning");
+    return;
+  }
+  if (!isValidSubnetRange(subnet)) {
+    showToast("⚠️ 监测网段支持 IPv4 CIDR /22~24（如 192.168.1.0/24）", "warning");
     return;
   }
 
-  startMonitorBtn.style.display = "none";
-  stopMonitorBtn.style.display = "block";
+  const rangeEstimateMessage = buildSubnetScanEstimateMessage(subnet);
+  if (rangeEstimateMessage) {
+    showToast(`⚠️ ${rangeEstimateMessage}`, "warning");
+  }
+  const estimateSeconds = estimateScanDurationSeconds(subnet);
+  const currentSessionId = ++monitorSessionId;
+  const monitorStartAt = Date.now();
+
+  setMonitorStartState(startMonitorBtn, stopMonitorBtn);
   monitorDevices.clear();
+  monitorLoadingInterval = stopMonitorLoadingTimer(monitorLoadingInterval);
+  monitorStartupTimeout = stopMonitorStartupTimeout(monitorStartupTimeout);
+  const monitorLoadingBase = "正在初始化监测目标...";
+  const monitorLoadingHint = (estimateSeconds
+    ? `当前扫描范围约：${rangeEstimateMessage}`
+    : "正在初始化监测目标...");
+  const renderMonitorLoading = () => {
+    if (!deviceGrid) return "";
+    return buildMonitorLoadingHtml(
+      monitorLoadingBase,
+      monitorStartAt,
+      estimateSeconds,
+      monitorLoadingHint,
+    );
+  };
+  monitorLoadingInterval = startMonitorLoadingTimer(deviceGrid, renderMonitorLoading, estimateSeconds);
+  monitorStartupTimeout = startMonitorStartupTimeout(
+    deviceGrid,
+    estimateSeconds,
+    DEFAULT_MONITOR_STARTUP_TIMEOUT_MESSAGE,
+    () => {
+      if (currentSessionId !== monitorSessionId) {
+        return;
+      }
+      monitorSessionId = currentSessionId + 1;
+      monitorLoadingInterval = stopMonitorLoadingTimer(monitorLoadingInterval);
+      monitorStartupTimeout = stopMonitorStartupTimeout(monitorStartupTimeout);
+      applyMonitorTimeoutFallback(deviceGrid, startMonitorBtn, stopMonitorBtn, DEFAULT_MONITOR_STARTUP_TIMEOUT_MESSAGE);
+    },
+  );
 
   // 先扫描设备
   try {
     const devices: NetworkDevice[] = await invoke("tauri_discover_devices", { subnet });
+    if (currentSessionId !== monitorSessionId) {
+      return;
+    }
     devices.forEach((d) => {
       monitorDevices.set(d.ip, {
         ip: d.ip,
@@ -1443,8 +1660,18 @@ async function startMonitor() {
     });
     updateMonitorStats();
     renderDeviceGrid();
+    monitorLoadingInterval = stopMonitorLoadingTimer(monitorLoadingInterval);
+    monitorStartupTimeout = stopMonitorStartupTimeout(monitorStartupTimeout);
   } catch (error) {
-    console.error("Failed to discover devices:", error);
+    if (currentSessionId !== monitorSessionId) {
+      return;
+    }
+    reportCommandError("监测模式设备发现", error);
+    monitorLoadingInterval = stopMonitorLoadingTimer(monitorLoadingInterval);
+    monitorStartupTimeout = stopMonitorStartupTimeout(monitorStartupTimeout);
+    if (deviceGrid) {
+      setMonitorErrorState(deviceGrid);
+    }
     stopMonitor();
     return;
   }
@@ -1486,12 +1713,14 @@ async function startMonitor() {
 }
 
 function stopMonitor() {
+  monitorSessionId += 1;
   if (monitorInterval) {
     clearInterval(monitorInterval);
     monitorInterval = null;
   }
-  startMonitorBtn.style.display = "block";
-  stopMonitorBtn.style.display = "none";
+  monitorLoadingInterval = stopMonitorLoadingTimer(monitorLoadingInterval);
+  monitorStartupTimeout = stopMonitorStartupTimeout(monitorStartupTimeout);
+  setMonitorStopState(startMonitorBtn, stopMonitorBtn);
 }
 
 function updateMonitorStats() {
@@ -1605,6 +1834,350 @@ function renderDeviceGrid() {
 
 startMonitorBtn?.addEventListener("click", startMonitor);
 stopMonitorBtn?.addEventListener("click", stopMonitor);
+
+// ===== Whois 查询 =====
+const whoisInput = document.getElementById("whois-input") as HTMLInputElement;
+const whoisQueryBtn = document.getElementById("whois-query-btn") as HTMLButtonElement;
+const whoisLoading = document.getElementById("whois-loading") as HTMLDivElement;
+const whoisError = document.getElementById("whois-error") as HTMLDivElement;
+const whoisResults = document.getElementById("whois-results") as HTMLDivElement;
+
+// Whois 结果元素
+const whoisDomain = document.getElementById("whois-domain") as HTMLDivElement;
+const whoisRegistrar = document.getElementById("whois-registrar") as HTMLDivElement;
+const whoisCreated = document.getElementById("whois-created") as HTMLDivElement;
+const whoisExpires = document.getElementById("whois-expires") as HTMLDivElement;
+const whoisStatus = document.getElementById("whois-status") as HTMLDivElement;
+const whoisNameservers = document.getElementById("whois-nameservers") as HTMLDivElement;
+const whoisDnssec = document.getElementById("whois-dnssec") as HTMLDivElement;
+const whoisDnssecSection = document.getElementById("whois-dnssec-section") as HTMLDivElement;
+const whoisRaw = document.getElementById("whois-raw") as HTMLElement;
+
+async function queryWhois() {
+  const domain = whoisInput.value.trim();
+  if (!domain) {
+    showToast("请输入域名", "error");
+    return;
+  }
+  if (!isValidHost(domain)) {
+    showToast("⚠️ 请输入有效的域名", "warning");
+    return;
+  }
+
+  // 显示加载状态
+  whoisLoading.classList.remove("hidden");
+  whoisError.classList.add("hidden");
+  whoisResults.classList.add("hidden");
+  whoisQueryBtn.disabled = true;
+
+  try {
+    const result: WhoisResult = await invoke("tauri_whois_query", { domain });
+
+    if (result.error) {
+      whoisError.textContent = `查询失败: ${result.error}`;
+      whoisError.classList.remove("hidden");
+      return;
+    }
+
+    // 填充结果
+    whoisDomain.textContent = result.domain || "-";
+    whoisRegistrar.textContent = result.registrar || "-";
+    whoisCreated.textContent = formatDate(result.created) || "-";
+    whoisExpires.textContent = formatDate(result.expires) || "-";
+
+    // 状态标签
+    if (result.status && result.status.length > 0) {
+      whoisStatus.innerHTML = result.status
+        .map(s => `<span class="whois-tag">${escapeHtml(s)}</span>`)
+        .join("");
+    } else {
+      whoisStatus.innerHTML = `<span class="whois-empty">无状态信息</span>`;
+    }
+
+    // 域名服务器
+    if (result.nameservers && result.nameservers.length > 0) {
+      whoisNameservers.innerHTML = result.nameservers
+        .map(ns => `<div class="whois-nameserver-item">${escapeHtml(ns)}</div>`)
+        .join("");
+    } else {
+      whoisNameservers.innerHTML = `<span class="whois-empty">无域名服务器信息</span>`;
+    }
+
+    // DNSSEC
+    if (result.dnssec) {
+      whoisDnssec.textContent = result.dnssec;
+      whoisDnssecSection.classList.remove("hidden");
+    } else {
+      whoisDnssecSection.classList.add("hidden");
+    }
+
+    // 原始输出
+    whoisRaw.textContent = result.raw_output || "无原始输出";
+
+    // 显示结果
+    whoisResults.classList.remove("hidden");
+  } catch (error) {
+    const msg = toCommandErrorMessage(error);
+    reportCommandError("Whois 查询", error);
+    whoisError.textContent = `查询失败: ${msg}`;
+    whoisError.classList.remove("hidden");
+  } finally {
+    whoisLoading.classList.add("hidden");
+    whoisQueryBtn.disabled = false;
+  }
+}
+
+function formatDate(dateStr: string | null): string | null {
+  if (!dateStr) return null;
+  try {
+    const date = new Date(dateStr);
+    if (!isNaN(date.getTime())) {
+      return date.toLocaleDateString("zh-CN", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      });
+    }
+  } catch {
+    // 忽略解析错误
+  }
+  return dateStr;
+}
+
+// 绑定 Whois 事件
+whoisQueryBtn?.addEventListener("click", queryWhois);
+whoisInput?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    queryWhois();
+  }
+});
+
+// ===== SSL 证书检查 =====
+const sslHostInput = document.getElementById("ssl-host-input") as HTMLInputElement;
+const sslPortInput = document.getElementById("ssl-port-input") as HTMLInputElement;
+const sslCheckBtn = document.getElementById("ssl-check-btn") as HTMLButtonElement;
+const sslLoading = document.getElementById("ssl-loading") as HTMLDivElement;
+const sslError = document.getElementById("ssl-error") as HTMLDivElement;
+const sslResults = document.getElementById("ssl-results") as HTMLDivElement;
+
+// SSL 证书结果元素
+const sslHost = document.getElementById("ssl-host") as HTMLDivElement;
+const sslSubject = document.getElementById("ssl-subject") as HTMLDivElement;
+const sslIssuer = document.getElementById("ssl-issuer") as HTMLDivElement;
+const sslValidFrom = document.getElementById("ssl-valid-from") as HTMLDivElement;
+const sslValidUntil = document.getElementById("ssl-valid-until") as HTMLDivElement;
+const sslDaysLeft = document.getElementById("ssl-days-left") as HTMLDivElement;
+const sslKeySize = document.getElementById("ssl-key-size") as HTMLDivElement;
+const sslSignature = document.getElementById("ssl-signature") as HTMLDivElement;
+const sslVersion = document.getElementById("ssl-version") as HTMLDivElement;
+const sslSerial = document.getElementById("ssl-serial") as HTMLDivElement;
+const sslTlsVersion = document.getElementById("ssl-tls-version") as HTMLDivElement;
+const sslCipherSuite = document.getElementById("ssl-cipher-suite") as HTMLDivElement;
+const sslChain = document.getElementById("ssl-chain") as HTMLDivElement;
+const sslSelfSigned = document.getElementById("ssl-self-signed") as HTMLSpanElement;
+const sslStatus = document.getElementById("ssl-status") as HTMLDivElement;
+
+async function checkSslCert() {
+  const host = sslHostInput.value.trim();
+  const rawPort = sslPortInput.value.trim();
+  const port = rawPort ? parsePort(rawPort) : 443;
+  if (rawPort && port === null) {
+    showToast("⚠️ 请输入 1-65535 的端口", "warning");
+    return;
+  }
+
+  if (!host) {
+    showToast("请输入主机名或 IP 地址", "error");
+    return;
+  }
+  if (!isValidHost(host)) {
+    showToast("⚠️ 请输入有效主机地址", "warning");
+    return;
+  }
+
+  // 显示加载状态
+  sslLoading.classList.remove("hidden");
+  sslError.classList.add("hidden");
+  sslResults.classList.add("hidden");
+  sslCheckBtn.disabled = true;
+
+  try {
+    const result: SslCertInfo = await invoke("tauri_check_ssl_cert", { host, port });
+
+    if (result.error) {
+      sslError.textContent = `检查失败: ${result.error}`;
+      sslError.classList.remove("hidden");
+      return;
+    }
+
+    // 填充基本信息
+    sslHost.textContent = `${result.host}:${result.port}`;
+    sslSubject.textContent = result.subject || "未知";
+    sslIssuer.textContent = result.issuer || "未知";
+    sslValidFrom.textContent = result.valid_from || "未知";
+    sslValidUntil.textContent = result.valid_until || "未知";
+
+    // 状态和剩余天数
+    if (result.is_expired) {
+      sslStatus.innerHTML = `<span class="cert-status expired">已过期</span>`;
+      sslDaysLeft.innerHTML = `<span class="cert-days expired">已过期 ${Math.abs(result.days_until_expiry)} 天</span>`;
+    } else if (result.days_until_expiry <= 30) {
+      sslStatus.innerHTML = `<span class="cert-status warning">即将过期</span>`;
+      sslDaysLeft.innerHTML = `<span class="cert-days warning">剩余 ${result.days_until_expiry} 天</span>`;
+    } else {
+      sslStatus.innerHTML = `<span class="cert-status valid">有效</span>`;
+      sslDaysLeft.innerHTML = `<span class="cert-days valid">剩余 ${result.days_until_expiry} 天</span>`;
+    }
+
+    // 自签名标记
+    if (result.is_self_signed) {
+      sslSelfSigned.classList.remove("hidden");
+    } else {
+      sslSelfSigned.classList.add("hidden");
+    }
+
+    // 证书详情
+    sslKeySize.textContent = result.key_size ? `${result.key_size} 位` : "未知";
+    sslSignature.textContent = result.signature_algorithm || "未知";
+    sslVersion.textContent = result.version || "未知";
+    sslSerial.textContent = result.serial_number || "未知";
+    sslTlsVersion.textContent = result.tls_version || "未知";
+    sslCipherSuite.textContent = result.cipher_suite || "未获取";
+
+    // 证书链
+    if (result.certificate_chain && result.certificate_chain.length > 0) {
+      sslChain.innerHTML = result.certificate_chain.map((cert, index) => `
+        <div class="cert-chain-item">
+          <div class="cert-chain-title">${index === 0 ? "服务器证书" : `中间证书 #${index}`}</div>
+          <div class="cert-chain-detail">主体: ${escapeHtml(cert.subject)}</div>
+          <div class="cert-chain-detail">颁发者: ${escapeHtml(cert.issuer)}</div>
+          ${cert.is_self_signed ? '<span class="cert-tag self-signed">自签名</span>' : ''}
+        </div>
+      `).join("");
+    } else {
+      sslChain.innerHTML = `<span class="whois-empty">无证书链信息</span>`;
+    }
+
+    // 显示结果
+    sslResults.classList.remove("hidden");
+  } catch (error) {
+    const msg = toCommandErrorMessage(error);
+    reportCommandError("SSL 证书检查", error);
+    sslError.textContent = `检查失败: ${msg}`;
+    sslError.classList.remove("hidden");
+  } finally {
+    sslLoading.classList.add("hidden");
+    sslCheckBtn.disabled = false;
+  }
+}
+
+// 绑定 SSL 事件
+sslCheckBtn?.addEventListener("click", checkSslCert);
+sslHostInput?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    checkSslCert();
+  }
+});
+sslPortInput?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    checkSslCert();
+  }
+});
+
+// ===== DNS 查询 =====
+const dnsDomainInput = document.getElementById("dns-domain-input") as HTMLInputElement;
+const dnsRecordType = document.getElementById("dns-record-type") as HTMLSelectElement;
+const dnsServer = document.getElementById("dns-server") as HTMLSelectElement;
+const dnsQueryBtn = document.getElementById("dns-query-btn") as HTMLButtonElement;
+const dnsLoading = document.getElementById("dns-loading") as HTMLDivElement;
+const dnsError = document.getElementById("dns-error") as HTMLDivElement;
+const dnsResults = document.getElementById("dns-results") as HTMLDivElement;
+
+// DNS 结果元素
+const dnsDomain = document.getElementById("dns-domain") as HTMLDivElement;
+const dnsType = document.getElementById("dns-type") as HTMLDivElement;
+const dnsCount = document.getElementById("dns-count") as HTMLDivElement;
+const dnsTime = document.getElementById("dns-time") as HTMLDivElement;
+const dnsRecordsList = document.getElementById("dns-records-list") as HTMLDivElement;
+
+async function queryDns() {
+  const domain = dnsDomainInput.value.trim();
+  const recordType = dnsRecordType.value;
+  const server = dnsServer.value || undefined;
+
+  if (!domain) {
+    showToast("请输入域名", "error");
+    return;
+  }
+  if (!isValidHost(domain)) {
+    showToast("⚠️ 请输入有效域名", "warning");
+    return;
+  }
+  if (server && !isValidHost(server)) {
+    showToast("⚠️ DNS 服务器地址不合法", "warning");
+    return;
+  }
+
+  // 显示加载状态
+  dnsLoading.classList.remove("hidden");
+  dnsError.classList.add("hidden");
+  dnsResults.classList.add("hidden");
+  dnsQueryBtn.disabled = true;
+
+  try {
+    const result: DnsQueryResult = await invoke("tauri_dns_query", {
+      domain,
+      recordType,
+      dnsServer: server,
+    });
+
+    if (result.error) {
+      dnsError.textContent = `查询失败: ${result.error}`;
+      dnsError.classList.remove("hidden");
+      return;
+    }
+
+    // 填充结果
+    dnsDomain.textContent = result.domain;
+    dnsType.textContent = result.record_type;
+    dnsCount.textContent = result.records.length.toString();
+    dnsTime.textContent = `${result.query_time_ms} ms`;
+    dnsTime.classList.add("dns-time-value");
+
+    // 显示记录列表
+    if (result.records && result.records.length > 0) {
+      dnsRecordsList.innerHTML = result.records.map(record => `
+        <div class="dns-record-item">
+          <div class="dns-record-name">${escapeHtml(record.name)}</div>
+          <div class="dns-record-type">${record.rtype}</div>
+          <div class="dns-record-ttl">TTL: ${record.ttl}s</div>
+          <div class="dns-record-data">${escapeHtml(record.data)}</div>
+        </div>
+      `).join("");
+    } else {
+      dnsRecordsList.innerHTML = `<span class="whois-empty">未找到记录</span>`;
+    }
+
+    // 显示结果
+    dnsResults.classList.remove("hidden");
+  } catch (error) {
+    const msg = toCommandErrorMessage(error);
+    reportCommandError("DNS 查询", error);
+    dnsError.textContent = `查询失败: ${msg}`;
+    dnsError.classList.remove("hidden");
+  } finally {
+    dnsLoading.classList.add("hidden");
+    dnsQueryBtn.disabled = false;
+  }
+}
+
+// 绑定 DNS 事件
+dnsQueryBtn?.addEventListener("click", queryDns);
+dnsDomainInput?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    queryDns();
+  }
+});
 
 // ===== 初始化 =====
 window.addEventListener("DOMContentLoaded", () => {

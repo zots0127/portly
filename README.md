@@ -62,6 +62,37 @@ npm run tauri build
 | Command | Show full process command line |
 | Hide System | Exclude system processes |
 
+---
+
+## 🧪 Testing / 测试
+
+### 默认测试（Mock）
+
+默认 `npm test` / `npm run test:ui` 走的是 **mock 化测试**，用于验证：
+
+- 数据流与状态更新
+- 错误与提示文案一致性
+- DOM 渲染与交互回归
+
+该模式不会执行真实网段扫描，不会触发真实内网探测。
+
+### 真实内网端到端（手工）
+
+真实扫描必须在目标内网环境中手工执行。仓库提供了一个环境开关测试入口，避免将内网扫描跑进普通 CI：
+
+- 先运行预检：
+  - `npm run precheck:lan-e2e`
+- 启用真实内网 E2E：
+  `RUN_LAN_E2E=1 LAN_E2E_SUBNET=192.168.1.0/24 LAN_E2E_CONFIRM=YES npm run test:lan-e2e`
+
+说明：
+
+- `RUN_LAN_E2E` 不存在时仅做提示与参数校验，不执行真实扫描。
+- 启用时请先确认扫描网段在 `/22~24` 合法范围，并且已连接到对应内网。
+- 真实端到端步骤仍以手工验证为主：打开应用、选择网段、观察“已耗时 / 预计还需”提示与异常超时文案。
+- `LAN_E2E_CONFIRM=YES` 是最终防误触发确认开关。
+
+
 ### CLI
 
 ```bash

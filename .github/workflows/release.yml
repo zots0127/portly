@@ -6,7 +6,42 @@ on:
       - "v*"
 
 jobs:
+  verify:
+    name: Verify Release Gate
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Verify frontend build
+        run: npm run build
+
+      - name: Verify frontend tests
+        run: npm test -- --run
+
+      - name: Verify Rust tests
+        env:
+          CARGO_TARGET_DIR: /tmp/portly-target
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
   create-release:
+    needs: verify
     permissions:
       contents: write
     runs-on: ubuntu-22.04
@@ -31,7 +66,7 @@ jobs:
             | Windows | `.msi` | `portly-cli.exe` |
             | Linux | `.deb` / `.AppImage` | `portly-cli` |
           draft: false
-          prerelease: false
+          prerelease: ${{ contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}
 
   build:
     needs: create-release
